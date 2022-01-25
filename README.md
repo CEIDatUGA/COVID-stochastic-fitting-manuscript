@@ -2,7 +2,7 @@
 
 Repository of code and data for manuscript on a semiparametric stochastic model of SARS-CoV-2 transmission in the United States of America. 
 
-The original model development was done in this repository <https://github.com/CEIDatUGA/COVID-stochastic-fitting> with results disseminated at <https://www.covid19.uga.edu/forecast.html>.
+The original model development was done at <https://github.com/CEIDatUGA/COVID-stochastic-fitting> with results disseminated at <https://www.covid19.uga.edu/forecast.html>.
 
 ## Authors
 John M. Drake<sup>1,2</sup>  
