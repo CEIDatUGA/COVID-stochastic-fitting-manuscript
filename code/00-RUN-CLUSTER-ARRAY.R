@@ -92,11 +92,11 @@ parallel_info$num_cores <- 2  # on HPC - this is the number of independent MIF r
 mif_settings = list()
 mif_settings$mif_num_particles  <- c(200,200,200,200)
 mif_settings$mif_num_iterations <- this_pomp$mifruns %>% unlist()
-mif_settings$mif_num_iterations <- c(10,10,10,10)
+mif_settings$mif_num_iterations <- c(2,2,2,2)
 mif_settings$pf_num_particles <- 2000#particles for filter run following mif
-mif_settings$pf_reps <- 20 #replicates for particle filter following mif
+mif_settings$pf_reps <- 1 #replicates for particle filter following mif
 mif_settings$mif_cooling_fracs <- c(1, 1, 1, 0.9)
-mif_settings$replicates <- 2 #number of different starting conditions - this is parallelized
+mif_settings$replicates <- 5 #number of different starting conditions - this is parallelized
 
 # --------------------------------------------------
 # Create a time-stamp variable
@@ -132,10 +132,22 @@ this_pomp$pomp_model <- pomp_model
 
 
 # params <- this_pomp$par_var_list$allparvals
-# params["df2"] <- 0.00000001
-# params["td"] <- log(1)
+# params["E1_0"] <- 1
+# params["Ia1_0"] <- 2
+# params["Isu1_0"] <- 2
+# params["E1_0"] <- 1
+# params["Isd1_0"] <- 1
+# params["H1_0"] <- 1
+# params["R_0"] <- 1
+# params["D_0"] <- 1
 # ttt <- simulate(pomp_model, nsim = 1, params = params, format = "data.frame")
-# plot(ttt$deaths)
+# plot(this_pomp$pomp_data$cases)
+# lines(ttt$C_new)
+# plot(this_pomp$pomp_data$deaths)
+# lines(ttt$D_new)
+# test <- pfilter(pomp_model, params = params, Np = 2000)
+# logLik(test)
+
 
 mif_res1 <- runmif_allstates(parallel_info = parallel_info, 
                             mif_settings = mif_settings, 
@@ -148,6 +160,10 @@ pomp_res1$mif_res = mif_res1
 mif_explore <- exploremifresults(pomp_res = pomp_res1, 
                                  par_var_list = pomp_res1$par_var_list,
                                  n_knots = n_knots) #compute trace plot and best
+
+# sample 100 parameter sets with loglikelihood weights
+sets <- mif_explore$est_partable
+lls <- sets$LogLik
 
 # filename = paste0('../output/', this_pomp$filename_label, '_results.rds')
 # saveRDS(object = mif_res, file = filename)

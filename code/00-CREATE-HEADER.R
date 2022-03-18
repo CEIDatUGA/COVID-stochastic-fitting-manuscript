@@ -100,6 +100,17 @@ all_states_pomp_data <- loadcleandata(datasource = datasource,
                                       trim = TRUE) %>%  # trim leading zeros (trim to first reported case or death for each state)
   dplyr::filter(date <= enddate)
 
+# add in initial NA data at t = 0 for all states to make initial estimation easier
+first_date <- all_states_pomp_data %>%
+  group_by(location) %>% 
+  filter(date == min(date)) %>%
+  ungroup() %>%
+  mutate(date = date - 1,
+         time = 0,
+         cases = NA, hosps = NA, deaths = NA)
+
+all_states_pomp_data <- bind_rows(first_date, all_states_pomp_data)
+
 all_states_pomp_covar <- loadcleanucmobility(location = statevec, 
                                              pomp_data = all_states_pomp_data) %>% 
   dplyr::filter(date <= enddate)

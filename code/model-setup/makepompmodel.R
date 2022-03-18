@@ -371,7 +371,7 @@ makepompmodel <- function(par_var_list, pomp_data, pomp_covar, n_knots)
   pomp_model <- pomp(
     data = dat_for_pomp, 
     times = "time",
-    t0 = 1,  # set first sim time to first observation time
+    t0 = 0,  # set first sim time to first observation time
     covar = pomp_covar,
     dmeasure = dmeas,
     rmeasure = rmeas,
