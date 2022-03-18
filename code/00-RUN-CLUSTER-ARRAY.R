@@ -73,7 +73,7 @@ parallel_info = list()
 parallel_info$parallel_run <- TRUE
 #parallel_info$num_cores <- parallel::detectCores() - 1  # alter as needed
 # Add one extra core for the master process
-parallel_info$num_cores <- 32  # on HPC - should ideally be M states * replicates mif runs (e.g. 10 states at a time, 20 mif runs, so 200) 
+parallel_info$num_cores <- 2  # on HPC - this is the number of independent MIF runs per state
 
 #to estimate run-time: 
 #run interactively non-parallel with planned MIF settings (possibly lower MIF replicates)
@@ -90,13 +90,13 @@ parallel_info$num_cores <- 32  # on HPC - should ideally be M states * replicate
 # --------------------------------------------------
 # two rounds of MIF are currently hard-coded into runmif
 mif_settings = list()
-mif_settings$mif_num_particles  <- c(2000,2000)
-# mif_settings$mif_num_iterations <- c(15,15)
+mif_settings$mif_num_particles  <- c(200,200,200,200)
 mif_settings$mif_num_iterations <- this_pomp$mifruns %>% unlist()
-mif_settings$pf_num_particles <- 5000#particles for filter run following mif
-mif_settings$pf_reps <- 32#replicates for particle filter following mif
-mif_settings$mif_cooling_fracs <- c(0.9, 0.7)
-mif_settings$replicates <- 32 #number of different starting conditions - this is parallelized
+mif_settings$mif_num_iterations <- c(10,10,10,10)
+mif_settings$pf_num_particles <- 2000#particles for filter run following mif
+mif_settings$pf_reps <- 20 #replicates for particle filter following mif
+mif_settings$mif_cooling_fracs <- c(1, 1, 1, 0.9)
+mif_settings$replicates <- 2 #number of different starting conditions - this is parallelized
 
 # --------------------------------------------------
 # Create a time-stamp variable
@@ -137,10 +137,17 @@ this_pomp$pomp_model <- pomp_model
 # ttt <- simulate(pomp_model, nsim = 1, params = params, format = "data.frame")
 # plot(ttt$deaths)
 
-mif_res <- runmif_allstates(parallel_info = parallel_info, 
+mif_res1 <- runmif_allstates(parallel_info = parallel_info, 
                             mif_settings = mif_settings, 
                             pomp_list = this_pomp, 
                             par_var_list = this_pomp$par_var_list)
+
+pomp_res1 = this_pomp #current state
+pomp_res1$mif_res = mif_res1
+
+mif_explore <- exploremifresults(pomp_res = pomp_res1, 
+                                 par_var_list = pomp_res1$par_var_list,
+                                 n_knots = n_knots) #compute trace plot and best
 
 # filename = paste0('../output/', this_pomp$filename_label, '_results.rds')
 # saveRDS(object = mif_res, file = filename)

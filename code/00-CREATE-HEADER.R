@@ -89,7 +89,7 @@ statedf <- readRDS(here::here("data/us_popsize.rds")) %>%
   
   # Mif runs for each state
   dplyr::mutate(mifruns = dplyr::case_when(
-    TRUE ~ list(c(1000,500)) # default mif runs vector
+    TRUE ~ list(c(200,50,50)) # default mif runs vector
   ))
 
 # Run data cleaning script.
@@ -118,6 +118,30 @@ est_these_pars = c("log_sigma_dw", "min_frac_dead", "max_frac_dead", "log_half_d
                    "log_theta_cases", "log_theta_deaths")
 est_these_inivals = c("E1_0", "Ia1_0", "Isu1_0", "Isd1_0")
 # est_these_inivals = ""  # to not estimate any initial values
+
+par_var_bounds <- list(
+  lowers = c(log_sigma_dw = -5,  # log scale
+             min_frac_dead = -6,  # logit scale
+             max_frac_dead = -6,  # logit scale
+             log_half_dead = -5,  # log scale
+             log_theta_cases = -5,  # log scale
+             log_theta_deaths = -5,  # log scale
+             E1_0 = 0,  # log scale
+             Ia1_0 = 0,  # log scale
+             Isu1_0 = 0,  # log scale
+             Isd1_0 = 0),  # log scale
+  
+  uppers = c(log_sigma_dw = 5,  # log scale
+             min_frac_dead = 6,  # logit scale
+             max_frac_dead = 6,  # logit scale
+             log_half_dead = 5,  # log scale
+             log_theta_cases = 5,  # log scale
+             log_theta_deaths = 5,  # log scale
+             E1_0 = 10,  # log scale
+             Ia1_0 = 10,  # log scale
+             Isu1_0 = 10,  # log scale
+             Isd1_0 = 10)  # log scale
+)
 
 # initialize large list that will hold pomp model and other info for each state
 pomp_list <- vector("list",length(statevec))
@@ -170,6 +194,16 @@ for (i in 1:length(statevec))
                                    # set R0 at beginning of epidemic
                                    rnaught = statedf %>% 
                                      filter(state_full == dolocation) %>% pull(initR0))  
+  
+  # add beta inits to par_var_bounds
+  beta_names <- paste0("b", 1:n_knots)
+  beta_lowers <- rep(-10, n_knots)
+  names(beta_lowers) <- beta_names
+  beta_uppers <- rep(10, n_knots)
+  names(beta_uppers) <- beta_names
+  par_var_bounds$lowers <- c(par_var_bounds$lowers, beta_lowers)
+  par_var_bounds$uppers <- c(par_var_bounds$uppers, beta_uppers)
+  par_var_list$par_var_bounds <- par_var_bounds  # for latin hypercube sample
   
   
   # Get covariate 

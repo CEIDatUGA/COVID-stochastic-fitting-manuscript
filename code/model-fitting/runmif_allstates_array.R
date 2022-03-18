@@ -62,6 +62,8 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
     perts_string <- paste0("rw.sd(",param_perts_string,", ",ini_perts_string,")")
   }
   
+  param_perts <- eval(parse(text=perts_string))
+  
   
   # Define function that runs the whole mif --------------------------
   # function that runs the whole mif, either in parallel or not
@@ -80,11 +82,13 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
                           params = start_params, 
                           Np = num_particles[1], 
                           cooling.fraction.50 = c_frac[1], 
-                          rw.sd = eval(parse(text=perts_string)),
+                          rw.sd = param_perts,
                           cooling.type = "geometric",
                           verbose = verbose)
     
-    out_mif <- pomp::continue(out_mif, # 2nd part of mif run to 'polish off' things
+    ## TODO(andrew): sample new starting params weighted by logliks
+    
+    out_mif <- pomp::continue(out_mif, # 2nd part of mif run
         Nmif = num_mif_iterations[2],
         Np = num_particles[2], 
         cooling.fraction.50 = c_frac[2], 
@@ -102,6 +106,17 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
     return(mif_res)
   }
   
+  # # set up matrix for starting values, each row is one set of initial conditions
+  # parvars_to_estimate <- c(params_to_estimate, inivals_to_estimate)
+  # 
+  # # generate latin hypercube sample from parametter and variable lowers/uppers
+  # par_var_bounds <- par_var_list$par_var_bounds
+  # lhc_df <- pomp::sobol_design(lower = par_var_bounds$lowers, 
+  #                              upper = par_var_bounds$uppers, 
+  #                              nseq = mif_settings$replicates)
+  # param_start <- as.matrix(lhc_df)
+  
+  ##########################
   # set up matrix for starting values, each row is one set of initial conditions
   param_start <- matrix(0,nrow = mif_settings$replicates, ncol = length(params_to_estimate)) 
   
@@ -123,6 +138,16 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
   fixed_par_mat = matrix(fixed_params,nrow=mif_settings$replicates,ncol=length(fixed_params),byrow=TRUE)
   colnames(fixed_par_mat) <- names(fixed_params)
   params_table = cbind(param_start,fixed_par_mat) 
+  ###################################
+  
+  # # the mif2 routine needs numeric/starting conditions for 
+  # # both fixed and variable parameters
+  # fixed_params <- allparvals[!(names(allparvals) %in% parvars_to_estimate)] 
+  # 
+  # #table containing all parameter values, those varied/fitted and fixed
+  # fixed_par_mat = matrix(fixed_params,nrow=mif_settings$replicates,ncol=length(fixed_params),byrow=TRUE)
+  # colnames(fixed_par_mat) <- names(fixed_params)
+  # params_table = cbind(param_start,fixed_par_mat) 
 
   
   mif_num_particles <- mif_settings$mif_num_particles
@@ -159,7 +184,7 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
                               num_mif_iterations = mif_num_iterations, 
                               num_particles = mif_num_particles, 
                               c_frac = mif_cooling_fracs, 
-                              param_perts = param_perts,
+                              param_perts = eval(parse(text=perts_string)),
                               verbose = FALSE
                               ) 
       } #finish loop over replicates for a given state
