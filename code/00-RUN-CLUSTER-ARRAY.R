@@ -71,9 +71,7 @@ n_knots <- round(nrow(this_pomp$pomp_data) / 21 )
 # turn on parallel running or not
 parallel_info = list()
 parallel_info$parallel_run <- TRUE
-#parallel_info$num_cores <- parallel::detectCores() - 1  # alter as needed
-# Add one extra core for the master process
-parallel_info$num_cores <- 2  # on HPC - this is the number of independent MIF runs per state
+parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF runs per state
 
 #to estimate run-time: 
 #run interactively non-parallel with planned MIF settings (possibly lower MIF replicates)
@@ -90,13 +88,13 @@ parallel_info$num_cores <- 2  # on HPC - this is the number of independent MIF r
 # --------------------------------------------------
 # two rounds of MIF are currently hard-coded into runmif
 mif_settings = list()
-mif_settings$mif_num_particles  <- c(200,200,200,200)
-mif_settings$mif_num_iterations <- this_pomp$mifruns %>% unlist()
-mif_settings$mif_num_iterations <- c(2,2,2,2)
-mif_settings$pf_num_particles <- 2000#particles for filter run following mif
-mif_settings$pf_reps <- 1 #replicates for particle filter following mif
-mif_settings$mif_cooling_fracs <- c(1, 1, 1, 0.9)
-mif_settings$replicates <- 5 #number of different starting conditions - this is parallelized
+mif_settings$mif_num_particles  <- c(2000,0200)
+iters <- this_pomp$mifruns %>% unlist()
+mif_settings$mif_num_iterations <- iters[1:2]
+mif_settings$pf_num_particles <- 50000#particles for filter run following mif
+mif_settings$pf_reps <- 20 #replicates for particle filter following mif
+mif_settings$mif_cooling_fracs <- c(1, 1)
+mif_settings$replicates <- parallel_info$num_cores #number of different starting conditions - this is parallelized
 
 # --------------------------------------------------
 # Create a time-stamp variable
@@ -126,78 +124,76 @@ pomp_model <- makepompmodel(par_var_list = this_pomp$par_var_list,
 this_pomp$pomp_model <- pomp_model
 
 
-# if(this_pomp$location %in% c("New York", "Washington", "New Jersey")) {
-#   mif_settings$mif_num_iterations <- c(350,150)
-# }
-
-
-# params <- this_pomp$par_var_list$allparvals
-# params["E1_0"] <- 1
-# params["Ia1_0"] <- 2
-# params["Isu1_0"] <- 2
-# params["E1_0"] <- 1
-# params["Isd1_0"] <- 1
-# params["H1_0"] <- 1
-# params["R_0"] <- 1
-# params["D_0"] <- 1
-# ttt <- simulate(pomp_model, nsim = 1, params = params, format = "data.frame")
-# plot(this_pomp$pomp_data$cases)
-# lines(ttt$C_new)
-# plot(this_pomp$pomp_data$deaths)
-# lines(ttt$D_new)
-# test <- pfilter(pomp_model, params = params, Np = 2000)
-# logLik(test)
-
-
+# Run first batch of MIF
 mif_res1 <- runmif_allstates(parallel_info = parallel_info, 
                             mif_settings = mif_settings, 
                             pomp_list = this_pomp, 
                             par_var_list = this_pomp$par_var_list)
 
-pomp_res1 = this_pomp #current state
-pomp_res1$mif_res = mif_res1
+pomp_res1 <- this_pomp #current state
+pomp_res1$mif_res <- mif_res1
 
 mif_explore <- exploremifresults(pomp_res = pomp_res1, 
                                  par_var_list = pomp_res1$par_var_list,
                                  n_knots = n_knots) #compute trace plot and best
 
-# sample 100 parameter sets with loglikelihood weights
-sets <- mif_explore$est_partable
+# sample parameter sets with loglikelihood weights
+nsample <- mif_settings$replicates
+sets <- mif_explore$est_partable %>%
+  filter(!is.nan(LogLik)) %>%
+  arrange(-LogLik)
 lls <- sets$LogLik
+weights <- exp(lls-mean(lls))
+weights <- weights / sum(weights)
+rids <- sample(1:nrow(sets), size = nsample, replace = TRUE, prob = weights)
+newparams <- tibble()
+for(i in rids) {
+  tmp <- sets[i, ] %>%
+    dplyr::select(-MIF_ID, -LogLik, -LogLik_SE)
+  for(j in 1:ncol(tmp)) {
+    tmp[1,j] <- rnorm(1, mean = tmp[1,j], sd = abs(tmp[1,j]/4))
+  }
+  # tack on the fixed parameters
+  fixed <- this_pomp$par_var_list$allparvals
+  fixed <- fixed[!names(fixed) %in% c(this_pomp$par_var_list$params_to_estimate,
+                                     this_pomp$par_var_list$inivals_to_estimate)]
+  fixed <- enframe(fixed) %>%
+    pivot_wider(names_from = "name", values_from = "value")
+  tmp <- bind_cols(fixed, tmp)
+  newparams <- bind_rows(newparams, tmp)
+}
+this_pomp$par_var_list$par_var_bounds <- NULL  # empty out the ranges
+this_pomp$par_var_list$allparvals_update <- newparams
 
-# filename = paste0('../output/', this_pomp$filename_label, '_results.rds')
-# saveRDS(object = mif_res, file = filename)
+# rerun MIF batch at new starting parameters
+mif_settings = list()
+mif_settings$mif_num_particles  <- c(2000,2000)
+iters <- this_pomp$mifruns %>% unlist()
+mif_settings$mif_num_iterations <- iters[3:4]
+mif_settings$pf_num_particles <- 50000 #particles for filter run following mif
+mif_settings$pf_reps <- 20 #replicates for particle filter following mif
+mif_settings$mif_cooling_fracs <- c(1, 0.9)
+mif_settings$replicates <- nrow(newparams) #number of different starting conditions - this is parallelized
 
-# --------------------------------------------------
-# Another serial loop over states  
-# performs mif result analysis, forecasting and data processing for each state
-# --------------------------------------------------
-# 
-# all_scenarios = NULL #will contain all scenarios for a state as a data frame
+mif_res2 <- runmif_allstates(parallel_info = parallel_info, 
+                             mif_settings = mif_settings, 
+                             pomp_list = this_pomp, 
+                             par_var_list = this_pomp$par_var_list)
 
 pomp_res = this_pomp #current state
-rm(this_pomp) #remove the old object
-pomp_res$mif_res = mif_res #add mif results for each state to overall pomp object
+pomp_res$mif_res = mif_res2
 
 mif_explore <- exploremifresults(pomp_res = pomp_res, 
                                  par_var_list = pomp_res$par_var_list,
-                                 n_knots = n_knots) #compute trace plot and best param tables for mif
+                                 n_knots = n_knots) #compute trace plot and best
+
 #add resutls computed to the pomp_res object
 pomp_res$traceplot = mif_explore$traceplot
 pomp_res$all_partable = mif_explore$all_partable
 pomp_res$est_partable = mif_explore$est_partable
 pomp_res$partable_natural = mif_explore$partable_natural
 
-#run simulations/forecasts based on mif fits for each state
-# scenario_res <- runscenarios(pomp_res = pomp_res, 
-#                              par_var_list = pomp_res$par_var_list, 
-#                              forecast_horizon_days = 37, 
-#                              nsim = 100)
-# 
-# #add forward simulation results to pomp_res object
-# pomp_res$scenario_res = scenario_res
-
-pomp_res$mif_res <- NULL #to save space, one can delete the full mif results before saving
+# pomp_res$mif_res <- NULL #to save space, one can delete the full mif results before saving
 
 # Simulate from the model at best MLE
 params <- pomp_res$all_partable %>%

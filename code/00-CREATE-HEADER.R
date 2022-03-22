@@ -89,7 +89,7 @@ statedf <- readRDS(here::here("data/us_popsize.rds")) %>%
   
   # Mif runs for each state
   dplyr::mutate(mifruns = dplyr::case_when(
-    TRUE ~ list(c(200,50,50)) # default mif runs vector
+    TRUE ~ list(c(100,100,50,50)) # default mif runs vector
   ))
 
 # Run data cleaning script.
@@ -212,9 +212,10 @@ for (i in 1:length(statevec))
   names(beta_lowers) <- beta_names
   beta_uppers <- rep(10, n_knots)
   names(beta_uppers) <- beta_names
-  par_var_bounds$lowers <- c(par_var_bounds$lowers, beta_lowers)
-  par_var_bounds$uppers <- c(par_var_bounds$uppers, beta_uppers)
-  par_var_list$par_var_bounds <- par_var_bounds  # for latin hypercube sample
+  par_var_bounds_all <- list()
+  par_var_bounds_all$lowers <- c(par_var_bounds$lowers, beta_lowers)
+  par_var_bounds_all$uppers <- c(par_var_bounds$uppers, beta_uppers)
+  par_var_list$par_var_bounds <- par_var_bounds_all  # for latin hypercube sample
   
   
   # Get covariate 

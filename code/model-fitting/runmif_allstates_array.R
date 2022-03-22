@@ -86,8 +86,6 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
                           cooling.type = "geometric",
                           verbose = verbose)
     
-    ## TODO(andrew): sample new starting params weighted by logliks
-    
     out_mif <- pomp::continue(out_mif, # 2nd part of mif run
         Nmif = num_mif_iterations[2],
         Np = num_particles[2], 
@@ -106,49 +104,28 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
     return(mif_res)
   }
   
-  # # set up matrix for starting values, each row is one set of initial conditions
-  # parvars_to_estimate <- c(params_to_estimate, inivals_to_estimate)
-  # 
-  # # generate latin hypercube sample from parametter and variable lowers/uppers
-  # par_var_bounds <- par_var_list$par_var_bounds
-  # lhc_df <- pomp::sobol_design(lower = par_var_bounds$lowers, 
-  #                              upper = par_var_bounds$uppers, 
-  #                              nseq = mif_settings$replicates)
-  # param_start <- as.matrix(lhc_df)
-  
-  ##########################
   # set up matrix for starting values, each row is one set of initial conditions
-  param_start <- matrix(0,nrow = mif_settings$replicates, ncol = length(params_to_estimate)) 
-  
-  # columns of matrix contain starting values for parameters to be estimated
-  colnames(param_start) <- params_to_estimate 
-  
-  # fill matrix with starting values drawn from normal distribution
-  for (i in 1:nrow(param_start)) {
-    param_start[i,] = rnorm(length(params_to_estimate), 
-                            allparvals[params_to_estimate], 
-                            sd = 1) 
-  } 
-  
-  # the mif2 routine needs numeric/starting conditions for 
-  # both fixed and variable parameters
-  fixed_params <- allparvals[!(names(allparvals) %in% params_to_estimate)] 
-  
-  #table containing all parameter values, those varied/fitted and fixed
-  fixed_par_mat = matrix(fixed_params,nrow=mif_settings$replicates,ncol=length(fixed_params),byrow=TRUE)
-  colnames(fixed_par_mat) <- names(fixed_params)
-  params_table = cbind(param_start,fixed_par_mat) 
-  ###################################
-  
-  # # the mif2 routine needs numeric/starting conditions for 
-  # # both fixed and variable parameters
-  # fixed_params <- allparvals[!(names(allparvals) %in% parvars_to_estimate)] 
-  # 
-  # #table containing all parameter values, those varied/fitted and fixed
-  # fixed_par_mat = matrix(fixed_params,nrow=mif_settings$replicates,ncol=length(fixed_params),byrow=TRUE)
-  # colnames(fixed_par_mat) <- names(fixed_params)
-  # params_table = cbind(param_start,fixed_par_mat) 
+  parvars_to_estimate <- c(params_to_estimate, inivals_to_estimate)
 
+  if(is.null(par_var_list$par_var_bounds)) {
+    params_table <- as.matrix(par_var_list$allparvals_update)
+  } else {
+    # generate latin hypercube sample from parametter and variable lowers/uppers
+    par_var_bounds <- par_var_list$par_var_bounds
+    lhc_df <- pomp::sobol_design(lower = par_var_bounds$lowers,
+                                 upper = par_var_bounds$uppers,
+                                 nseq = mif_settings$replicates)
+    param_start <- as.matrix(lhc_df)
+    
+    # the mif2 routine needs numeric/starting conditions for
+    # both fixed and variable parameters
+    fixed_params <- allparvals[!(names(allparvals) %in% parvars_to_estimate)]
+    
+    #table containing all parameter values, those varied/fitted and fixed
+    fixed_par_mat = matrix(fixed_params,nrow=mif_settings$replicates,ncol=length(fixed_params),byrow=TRUE)
+    colnames(fixed_par_mat) <- names(fixed_params)
+    params_table = cbind(param_start,fixed_par_mat)
+  }
   
   mif_num_particles <- mif_settings$mif_num_particles
   mif_num_iterations <- mif_settings$mif_num_iterations 
