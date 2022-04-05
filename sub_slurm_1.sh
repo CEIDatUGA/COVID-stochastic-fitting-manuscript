@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=covstateshdr       # Job name
-#SBATCH --partition=covid19_p         # Partition (queue) name
+#SBATCH --partition=batch         # Partition (queue) name
 #SBATCH --ntasks=1                    # Run on a single CPU
 #SBATCH --mem=3500M                  # Job memory request
 #SBATCH --time=01:00:00               # Time limit hrs:min:sec
