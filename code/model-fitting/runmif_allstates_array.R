@@ -110,9 +110,14 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
   if(is.null(par_var_list$par_var_bounds)) {
     params_table <- as.matrix(par_var_list$allparvals_update)
   } else {
-    # generate latin hypercube sample from parametter and variable lowers/uppers
+    # generate latin hypercube sample from parameter and variable lowers/uppers
     par_var_bounds <- par_var_list$par_var_bounds
-    lhc_df <- pomp::sobol_design(lower = par_var_bounds$lowers,
+    # pomp > version 3.2 uses the function "sobol_design"
+    # lhc_df <- pomp::sobol_design(lower = par_var_bounds$lowers,
+    #                              upper = par_var_bounds$uppers,
+    #                              nseq = mif_settings$replicates)
+    # pomp < version 3.2 uses the function "sobolDesign"
+    lhc_df <- pomp::sobolDesign(lower = par_var_bounds$lowers,
                                  upper = par_var_bounds$uppers,
                                  nseq = mif_settings$replicates)
     param_start <- as.matrix(lhc_df)
