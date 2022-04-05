@@ -71,7 +71,8 @@ n_knots <- round(nrow(this_pomp$pomp_data) / 21 )
 # turn on parallel running or not
 parallel_info = list()
 parallel_info$parallel_run <- TRUE
-parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF runs per state
+# parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF runs per state
+parallel_info$num_cores <- 32  # on HPC - test run with 32 independent MIF runs pre state
 
 #to estimate run-time: 
 #run interactively non-parallel with planned MIF settings (possibly lower MIF replicates)
@@ -88,7 +89,7 @@ parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF
 # --------------------------------------------------
 # two rounds of MIF are currently hard-coded into runmif
 mif_settings = list()
-mif_settings$mif_num_particles  <- c(2000,0200)
+mif_settings$mif_num_particles  <- c(2000,2000)
 iters <- this_pomp$mifruns %>% unlist()
 mif_settings$mif_num_iterations <- iters[1:2]
 mif_settings$pf_num_particles <- 50000#particles for filter run following mif
