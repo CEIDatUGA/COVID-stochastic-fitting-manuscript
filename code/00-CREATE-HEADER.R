@@ -67,7 +67,8 @@ timestamp <- paste(lubridate::date(tm),
 # specify which states to run as a vector 
 # --------------------------------------------------
 
-statevec <- c(state.name, "District of Columbia") # 50 states plus DC
+# statevec <- c(state.name, "District of Columbia") # 50 states plus DC
+statevec <- c("Washington") # Washington
 
 # --------------------------------------------------
 # specify parameter initialization and mif runs for each state 
