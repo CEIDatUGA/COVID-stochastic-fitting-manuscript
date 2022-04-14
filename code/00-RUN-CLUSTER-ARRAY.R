@@ -138,11 +138,16 @@ mif_explore <- exploremifresults(pomp_res = pomp_res1,
                                  par_var_list = pomp_res1$par_var_list,
                                  n_knots = n_knots) #compute trace plot and best
 
+# SAVE objects for debugging. Comment out before full run
+saveRDS(object = mif_res1, file = paste0('../output/mif_res1.rds')) 
+saveRDS(object = mif_explore, file = paste0('../output/mif_explore.rds'))  
+
 # sample parameter sets with loglikelihood weights
 nsample <- mif_settings$replicates
 sets <- mif_explore$est_partable %>%
   filter(!is.nan(LogLik)) %>%
-  arrange(-LogLik)
+  arrange(-LogLik) %>%
+  filter(LogLik >= (max(LogLik)-2))
 lls <- sets$LogLik
 weights <- exp(lls-mean(lls))
 weights <- weights / sum(weights)
