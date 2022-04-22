@@ -217,6 +217,7 @@ ggplot(sim, aes(x = time, y = cases)) +
 # pomp_res$sims <- sim 
 
 ## smoothed posterior estimates
+### https://github.com/kingaa/pomp/issues/74
 pf_reps <- 50  # 1000 production
 pf_num_particles <- 1000  # 2500 production
 pf <- replicate(n = pf_reps, pfilter(this_pomp$pomp_model,
@@ -226,15 +227,9 @@ pf <- replicate(n = pf_reps, pfilter(this_pomp$pomp_model,
                                      save.states = TRUE,
                                      max.fail = Inf))
 
-
-### https://github.com/kingaa/pomp/issues/74
-
 filter_states <- tibble()
 for(i in 1:length(pf)) {
   tmp <- pf[[i]]
-  # tmparr <- array(unlist(tmp@saved.states), 
-  #                  dim = c(dim(tmp@saved.states[[1]]), length(tmp@saved.states)))
-  # id <- sample(1:pf_num_particles, 1)
   tmparr <- tmp@filter.traj[,1,]
   tmpout <- t(tmparr)
   colnames(tmpout) <- rownames(tmp@saved.states[[1]])
