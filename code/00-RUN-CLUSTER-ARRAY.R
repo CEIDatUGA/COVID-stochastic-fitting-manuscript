@@ -72,7 +72,7 @@ n_knots <- round(nrow(this_pomp$pomp_data) / 21 )
 parallel_info = list()
 parallel_info$parallel_run <- TRUE
 # parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF runs per state
-parallel_info$num_cores <- 32  # on HPC - test run with 32 independent MIF runs pre state
+parallel_info$num_cores <- 5  # on HPC - test run with 32 independent MIF runs pre state
 
 #to estimate run-time: 
 #run interactively non-parallel with planned MIF settings (possibly lower MIF replicates)
@@ -89,11 +89,11 @@ parallel_info$num_cores <- 32  # on HPC - test run with 32 independent MIF runs 
 # --------------------------------------------------
 # two rounds of MIF are currently hard-coded into runmif
 mif_settings = list()
-mif_settings$mif_num_particles  <- c(2000,2000)
+mif_settings$mif_num_particles  <- c(200,200)
 iters <- this_pomp$mifruns %>% unlist()
-mif_settings$mif_num_iterations <- iters[1:2]
-mif_settings$pf_num_particles <- 50000#particles for filter run following mif
-mif_settings$pf_reps <- 20 #replicates for particle filter following mif
+mif_settings$mif_num_iterations <- c(5,5) # iters[1:2]
+mif_settings$pf_num_particles <- 5000#particles for filter run following mif
+mif_settings$pf_reps <- 10 #replicates for particle filter following mif
 mif_settings$mif_cooling_fracs <- c(1, 1)
 mif_settings$replicates <- parallel_info$num_cores #number of different starting conditions - this is parallelized
 
@@ -142,7 +142,8 @@ mif_explore <- exploremifresults(pomp_res = pomp_res1,
 nsample <- mif_settings$replicates
 sets <- mif_explore$est_partable %>%
   filter(!is.nan(LogLik)) %>%
-  arrange(-LogLik)
+  arrange(-LogLik) %>%
+  filter(LogLik >= (max(LogLik)-2))
 lls <- sets$LogLik
 weights <- exp(lls-mean(lls))
 weights <- weights / sum(weights)
@@ -200,12 +201,67 @@ pomp_res$partable_natural = mif_explore$partable_natural
 params <- pomp_res$all_partable %>%
   arrange(-LogLik) %>%
   slice(1) %>%
+  mutate(log_beta_s = -16.9) %>%
   dplyr::select(-MIF_ID, -LogLik, -LogLik_SE) %>%
   gather() %>%
   tibble::deframe()
 sim <- pomp::simulate(pomp_res$pomp_model, params = params, 
                       nsim = 100, format = "data.frame")
-pomp_res$sims <- sim 
+
+head(sim)
+ggplot(sim, aes(x = time, y = cases)) +
+  geom_line(aes(group = .id)) +
+  geom_point(data= this_pomp$pomp_data, aes(x = time, y = cases),
+             color = "blue")
+
+# pomp_res$sims <- sim 
+
+## smoothed posterior estimates
+pf_reps <- 50  # 1000 production
+pf_num_particles <- 1000  # 2500 production
+pf <- replicate(n = pf_reps, pfilter(this_pomp$pomp_model,
+                                     params = params,
+                                     Np = pf_num_particles,
+                                     filter.traj= TRUE,
+                                     save.states = TRUE,
+                                     max.fail = Inf))
+
+
+### https://github.com/kingaa/pomp/issues/74
+
+filter_states <- tibble()
+for(i in 1:length(pf)) {
+  tmp <- pf[[i]]
+  # tmparr <- array(unlist(tmp@saved.states), 
+  #                  dim = c(dim(tmp@saved.states[[1]]), length(tmp@saved.states)))
+  # id <- sample(1:pf_num_particles, 1)
+  tmparr <- tmp@filter.traj[,1,]
+  tmpout <- t(tmparr)
+  colnames(tmpout) <- rownames(tmp@saved.states[[1]])
+  tmpout <- as.data.frame(tmpout) %>%
+    mutate(time = 1:n(),
+           pf_rep = i,
+           loglik = tmp@loglik) %>%
+    dplyr::select(time, pf_rep, loglik, everything()) %>%
+    as_tibble()
+  filter_states <- bind_rows(filter_states, tmpout)
+}
+
+filter_states %>%
+  dplyr::select(time, pf_rep, C_new) %>%
+  group_by(time) %>%
+  summarise(med_cases = median(C_new),
+            lower_cases = quantile(C_new, 0.025),
+            upper_cases = quantile(C_new, 0.975)) %>%
+  ggplot(aes(x = time, y = med_cases)) +
+  geom_point(data= this_pomp$pomp_data, aes(x = time, y = cases),
+             color = "blue", size = 0.5) +
+  geom_ribbon(aes(ymin = lower_cases, ymax = upper_cases), alpha = 0.2) +
+  geom_line() +
+  theme_classic()
+
+
+
 
 #save the completed analysis for each state to a file with time-stamp
 #this file could be large, needs checking
