@@ -14,7 +14,7 @@ rm(list = ls(all.names = TRUE))
 # Set global options ------------------------------------------------------
 
 TEST <- TRUE  # FALSE for production run
-LOCAL <- TRUE  # FALSE for cluster run
+LOCAL <- FALSE  # FALSE for cluster run
 
 # set state id if running on local machine
 if(LOCAL) a = 1
@@ -23,7 +23,7 @@ if(LOCAL) a = 1
 PARALLEL_FLAG <- ifelse(TEST, TRUE, TRUE)
 
 # number of cores to parallelize across
-NUM_CORES <- ifelse(TEST, 2, 32)  
+NUM_CORES <- ifelse(TEST, 5, 32)  
 
 # number of particles for each mif2 iterations
 MIF_PARTICLES <- ifelse(TEST, 200, 3500)  
@@ -43,7 +43,7 @@ if(TEST) {
 
 # number of independent mif2 runs, run in parallel with different 
 # parameter starting conditions
-MIF_RUNS <- ifelse(TEST, 2, 100)  
+MIF_RUNS <- ifelse(TEST, 10, 100)  
 
 # number of particles for pfilter loglik estimation
 PF_LL_PARTICLES <- ifelse(TEST, 10, 5000)

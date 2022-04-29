@@ -15,7 +15,8 @@ loadcleanucmobility <- function(location, pomp_data)
   dates <- pomp_data %>%
     group_by(location) %>%
     summarise(startdate = min(date),
-              enddate = max(date)) %>%
+              enddate = max(date),
+              .groups = "drop") %>% 
     ungroup()
   
   alldates <- pomp_data %>%
@@ -33,7 +34,8 @@ loadcleanucmobility <- function(location, pomp_data)
     tmp <- readRDS(here::here("data/ucmobility/state_breakdown/", fname)) %>%
       mutate(state_abb = stateabb) %>%
       group_by(state, Date, time, state_abb) %>%
-      summarise(rel_beta_change = mean(rel_beta_change)) %>%
+      summarise(rel_beta_change = mean(rel_beta_change),
+                .groups = "drop") %>%
       ungroup() %>%
       mutate(state = as.character(state))
     uc_mobility <- bind_rows(uc_mobility, tmp)

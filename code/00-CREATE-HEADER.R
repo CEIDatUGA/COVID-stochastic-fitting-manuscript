@@ -1,22 +1,25 @@
-# 00-MASTER-LOCAL-CLUSTER.R
-# This script is designed to run the entire workflow for estimating
-# parameters for the stochastic COVID-19 model and for producing
-# estimates of observed states and forecasts of states. 
-
-# --------------------------------------------------
-# --------------------------------------------------
-# General setup
-# --------------------------------------------------
-# --------------------------------------------------
+# This script creates header information for all states that the
+# cluster array script can read in for fitting the model.
 
 
-# Start with a clean workspace to avoid downstream errors -----------------
+
+# Clean workspace ---------------------------------------------------------
+
 rm(list = ls(all.names = TRUE))
 
-# --------------------------------------------------
-# Load necessary libraries 
-# --------------------------------------------------
-# could be loaded here or inside functions
+
+
+# Set global parameters ---------------------------------------------------
+
+TEST <- TRUE
+DATA_SOURCE <- "JHU"
+END_DATE <- as.Date("2020-12-31")
+STATES <- ifelse(TEST, "Georgia", c(state.name, "District of Columbia"))
+
+
+
+# Load libraries ----------------------------------------------------------
+
 library('lubridate') #needs to loaded first so it doesn't mess with 'here'
 library('readr')
 library('doParallel')
@@ -31,28 +34,23 @@ library('vctrs')
 library('dplyr')
 
 
-# --------------------------------------------------
-# Source all needed functions/scripts
-# --------------------------------------------------
-source(here::here("code/model-setup/setparsvars.R")) #setting all parameters, specifying those that are  fitted
-source(here::here("code/data-processing/loadcleandata.R")) #data processing function
-source(here::here("code/data-processing/loadcleanucmobility.R")) #function that processes and retrieves covariate
 
-# --------------------------------------------------
-# Set data source 
-# --------------------------------------------------
-datasource <- c("JHU") #one of CovidTracker (COV), NYT (NYT), JHU (JHU), USAFacts (USF)
+# Source functions --------------------------------------------------------
 
-# --------------------------------------------------
-# Set end date for study 
-# --------------------------------------------------
-enddate <- as.Date("2020-12-31") # to limit the end date of the input data
+# setting all parameters, specifying those that are  fitted
+source(here::here("code/model-setup/setparsvars.R")) 
 
-# --------------------------------------------------
-# Create a time-stamp variable
-# Will be applied to saved results
-# defined outside loop so it's the same for each state
-# --------------------------------------------------
+# loads data from JHU
+source(here::here("code/data-processing/loadcleandata.R"))
+
+# function that processes and retrieves mobility covariate
+source(here::here("code/data-processing/loadcleanucmobility.R")) 
+
+
+
+
+# Generate time stamp -----------------------------------------------------
+
 tm <- .POSIXct(Sys.time(), "US/Eastern")  # time stamp with date, hours, minutes
 timestamp <- paste(lubridate::date(tm),
                stringr::str_pad(as.character(lubridate::hour(tm)), 
@@ -62,35 +60,33 @@ timestamp <- paste(lubridate::date(tm),
                sep='-')
 
 
-# --------------------------------------------------
-# specify which states to run as a vector 
-# --------------------------------------------------
 
-# statevec <- c(state.name, "District of Columbia") # 50 states plus DC
-statevec <- c("Georgia") # Washington
 
-# --------------------------------------------------
-# specify parameter initialization and mif runs for each state 
-# --------------------------------------------------
+# Specify initial RO conditions for fitting -------------------------------
+
 statedf <- readRDS(here::here("data/us_popsize.rds")) %>% 
-  dplyr::filter(state_full %in% statevec) %>% 
+  dplyr::filter(state_full %in% STATES) %>% 
   dplyr::mutate(init = "fresh") %>% 
   # R0 at beginning of epidemic for each state, choosing max possible
   # since mobility and latent trend can only reduce
   dplyr::mutate(initR0 = 7) 
 
-# Run data cleaning script.
+
+
+# Get data ----------------------------------------------------------------
+
 all_states_pomp_data <- loadcleandata(
-  datasource = datasource,
-  locations = statevec,
+  datasource = DATA_SOURCE,
+  locations = STATES,
   vars = c("cases", "hosps", "deaths"),
   smooth = FALSE,  # use raw data no smoothing
   # trim leading zeros (trim to first reported case or death for each state)
   trim = TRUE
 ) %>%  
-  dplyr::filter(date <= enddate)
+  dplyr::filter(date <= END_DATE)
 
-# add in initial NA data at t = 0 for all states to make initial estimation easier
+# add in initial NA data at t = 0 for all states to 
+# make initial estimation easier (pomp trick)
 first_date <- all_states_pomp_data %>%
   group_by(location) %>% 
   filter(date == min(date)) %>%
@@ -101,26 +97,36 @@ first_date <- all_states_pomp_data %>%
 
 all_states_pomp_data <- bind_rows(first_date, all_states_pomp_data)
 
+
+
+# Get the mobility metrics ------------------------------------------------
+
 all_states_pomp_covar <- loadcleanucmobility(
-  location = statevec,
+  location = STATES,
   pomp_data = all_states_pomp_data
 ) %>%
-  dplyr::filter(date <= enddate)
+  dplyr::filter(date <= END_DATE)
 
 
-# --------------------------------------------------
-# Loop over states  
-# initial loop is serial and done to create the different bits needed for mif for each state 
-# --------------------------------------------------
 
-# --------------------------------------------------
-# Specify parameters and initial state variables to estimate  
-# --------------------------------------------------
 
-est_these_pars = c("log_sigma_dw", "min_frac_dead", "max_frac_dead", "log_half_dead",
-                   "log_theta_cases", "log_theta_deaths")
-est_these_inivals = c("E1_0", "Ia1_0", "Isu1_0", "Isd1_0")
-# est_these_inivals = ""  # to not estimate any initial values
+# Set up parameter bounds for latin hypercube sample ----------------------
+
+est_these_pars <- c(
+  "log_sigma_dw",
+  "min_frac_dead",
+  "max_frac_dead",
+  "log_half_dead",
+  "log_theta_cases",
+  "log_theta_deaths"
+)
+
+est_these_inivals <- c(
+  "E1_0", 
+  "Ia1_0",
+  "Isu1_0", 
+  "Isd1_0"
+)
 
 par_var_bounds <- list(
   lowers = c(log_sigma_dw = -5,  # log scale
@@ -146,17 +152,15 @@ par_var_bounds <- list(
              Isd1_0 = 10)  # log scale
 )
 
+
+
+# Loop over states and store model fitting information --------------------
+
 # initialize large list that will hold pomp model and other info for each state
-pomp_list <- vector("list",length(statevec))
+pomp_list <- vector("list", length(STATES))
 
-# --------------------------------------------------
-# Loop over states  
-# initial loop is serial and done to create the different bits needed for mif for each state 
-# --------------------------------------------------
-
-for (i in 1:length(statevec))
-{
-  dolocation <- rev(statevec)[i]
+for(i in 1:length(STATES)) {
+  dolocation <- STATES[i]
   print(sprintf('starting state %s', dolocation))
   
   # This will be appended to each saved file 
@@ -167,25 +171,8 @@ for (i in 1:length(statevec))
     filter(location == dolocation)
   
   # calculate number of knots for location
-  n_knots <- round(nrow(pomp_data) / 21 )
+  n_knots <- round(nrow(pomp_data) / 21)
   knot_coefs <-  paste0("b", 1:n_knots)
-  
-  # Get the locations's iniparvals
-  initdate <- statedf %>% filter(state_full == dolocation) %>% pull(init)
-  iniparvals <- initdate %>% 
-    switch(
-      # if init = 'fresh'
-      fresh = 'fresh',
-      
-      # if init = 'last'
-      ## edit source file location for 00-CREATE-HEADER.R
-      last = readRDS(here::here(paste0("output/current/parameter-estimates-", filename_label, ".rds"))) %>% as.list(),
-      
-      # else
-      ## does not exist for 00-Run-LOCAL.R
-      ## edit source file location as needed for 00-CREATE-HEADER.R
-      readRDS(here::here(paste0("output/", initdate, "/parameter-estimates-", filename_label, ".rds"))) %>% as.list()
-    )
   
   # Set the parameter values and initial conditions
   par_var_list <- setparsvars(
@@ -237,18 +224,14 @@ for (i in 1:length(statevec))
   pomp_list[[i]]$location <- dolocation
   pomp_list[[i]]$par_var_list <- par_var_list
   
-} #done serial loop over all states that creates pomp object and other info 
+} # done serial loop over all states that creates info for fitting
 
 
-# Save the outputs
+
+# Save header outputs for array job ---------------------------------------
+
+
 saveRDS(pomp_list, file = here::here("header/pomp_list.rds"))
 saveRDS(timestamp, file = here::here("header/timestamp.rds"))
 saveRDS(statedf, file = here::here("header/statedf.rds"))
-
-# Create new folder for benchmark storage
-datestamp <- Sys.Date()
-dir.create(paste0("output/", datestamp, "/"))
-
-# Create folder to write current fits and projections
-dir.create(paste0("output/current/"))
 
