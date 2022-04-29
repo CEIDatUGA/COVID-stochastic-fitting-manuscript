@@ -85,7 +85,7 @@ statedf <- readRDS(here::here("data/us_popsize.rds")) %>%
   
   # R0 at beginning of epidemic for each state
   dplyr::mutate(initR0 = dplyr::case_when(
-    TRUE ~ 6 # default initial R0
+    TRUE ~ 3 # default initial R0
   )) %>% 
   
   # Mif runs for each state
