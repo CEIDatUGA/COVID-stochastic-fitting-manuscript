@@ -201,7 +201,7 @@ pomp_res$partable_natural = mif_explore$partable_natural
 params <- pomp_res$all_partable %>%
   arrange(-LogLik) %>%
   slice(1) %>%
-  mutate(log_beta_s = -16.9) %>%
+  # mutate(log_beta_s = -16.9) %>%
   dplyr::select(-MIF_ID, -LogLik, -LogLik_SE) %>%
   gather() %>%
   tibble::deframe()
@@ -218,7 +218,7 @@ ggplot(sim, aes(x = time, y = cases)) +
 
 ## smoothed posterior estimates
 ### https://github.com/kingaa/pomp/issues/74
-pf_reps <- 50  # 1000 production
+pf_reps <- 10  # 1000 production
 pf_num_particles <- 1000  # 2500 production
 pf <- replicate(n = pf_reps, pfilter(this_pomp$pomp_model,
                                      params = params,
@@ -242,18 +242,32 @@ for(i in 1:length(pf)) {
   filter_states <- bind_rows(filter_states, tmpout)
 }
 
+dat_to_plot <- this_pomp$pomp_data %>%
+  dplyr::select(date, time, cases, deaths) %>%
+  pivot_longer(cols = c(cases, deaths)) %>%
+  filter(time != 0) %>%
+  mutate(name = case_when(name == "cases" ~ "Cases",
+                          name == "deaths" ~ "Deaths"))
+
 filter_states %>%
-  dplyr::select(time, pf_rep, C_new) %>%
-  group_by(time) %>%
-  summarise(med_cases = median(C_new),
-            lower_cases = quantile(C_new, 0.025),
-            upper_cases = quantile(C_new, 0.975)) %>%
-  ggplot(aes(x = time, y = med_cases)) +
-  geom_point(data= this_pomp$pomp_data, aes(x = time, y = cases),
+  dplyr::select(time, pf_rep, C_new, D_new) %>%
+  pivot_longer(cols = C_new:D_new) %>%
+  group_by(time, name) %>%
+  summarise(med_val = median(value),
+            lower_val = quantile(value, 0.025),
+            upper_val = quantile(value, 0.975),
+            .groups = "drop") %>%
+  mutate(name = case_when(name == "C_new" ~ "Cases",
+                          name == "D_new" ~ "Deaths")) %>%
+  left_join(dat_to_plot %>% dplyr::select(time, date)) %>%
+  ggplot(aes(x = date, y = med_val)) +
+  geom_point(data= dat_to_plot, aes(x = date, y = value),
              color = "blue", size = 0.5) +
-  geom_ribbon(aes(ymin = lower_cases, ymax = upper_cases), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lower_val, ymax = upper_val), alpha = 0.2) +
   geom_line() +
-  theme_classic()
+  facet_wrap(~name, scales = "free") +
+  labs(x = "Date", y = "Daily reports", title = "Washington") +
+  ggthemes::theme_few(base_size = 14)
 
 
 
