@@ -34,7 +34,7 @@ library('dplyr')
 # --------------------------------------------------
 # Source all needed functions/scripts
 # --------------------------------------------------
-source(here::here("code/model-setup/setparsvars_warm.R")) #setting all parameters, specifying those that are  fitted
+source(here::here("code/model-setup/setparsvars.R")) #setting all parameters, specifying those that are  fitted
 source(here::here("code/data-processing/loadcleandata.R")) #data processing function
 source(here::here("code/data-processing/loadcleanucmobility.R")) #function that processes and retrieves covariate
 
@@ -47,7 +47,6 @@ datasource <- c("JHU") #one of CovidTracker (COV), NYT (NYT), JHU (JHU), USAFact
 # Set end date for study 
 # --------------------------------------------------
 enddate <- as.Date("2020-12-31") # to limit the end date of the input data
-# enddate <- NULL # to use the full available date range
 
 # --------------------------------------------------
 # Create a time-stamp variable
@@ -75,30 +74,20 @@ statevec <- c("Georgia") # Washington
 # --------------------------------------------------
 statedf <- readRDS(here::here("data/us_popsize.rds")) %>% 
   dplyr::filter(state_full %in% statevec) %>% 
-  # warm start spec for each state 
-  dplyr::mutate(init = dplyr::case_when(
-    # state_full == "Indiana" ~ "2020-09-14", # example: use date of last good fit for warm start
-    # state_full == "Indiana" ~ "fresh", # example: fit from scratch
-    # state_full == "Indiana" ~ "last", # example: use last date for warm start
-    TRUE ~ "fresh" # default fresh start 
-  )) %>% 
-  
-  # R0 at beginning of epidemic for each state
-  dplyr::mutate(initR0 = dplyr::case_when(
-    TRUE ~ 3 # default initial R0
-  )) %>% 
-  
-  # Mif runs for each state
-  dplyr::mutate(mifruns = dplyr::case_when(
-    TRUE ~ list(c(100,100,50,50)) # default mif runs vector
-  ))
+  dplyr::mutate(init = "fresh") %>% 
+  # R0 at beginning of epidemic for each state, choosing max possible
+  # since mobility and latent trend can only reduce
+  dplyr::mutate(initR0 = 7) 
 
 # Run data cleaning script.
-all_states_pomp_data <- loadcleandata(datasource = datasource, 
-                                      locations = statevec, 
-                                      vars = c("cases","hosps","deaths"),
-                                      smooth = FALSE,
-                                      trim = TRUE) %>%  # trim leading zeros (trim to first reported case or death for each state)
+all_states_pomp_data <- loadcleandata(
+  datasource = datasource,
+  locations = statevec,
+  vars = c("cases", "hosps", "deaths"),
+  smooth = FALSE,  # use raw data no smoothing
+  # trim leading zeros (trim to first reported case or death for each state)
+  trim = TRUE
+) %>%  
   dplyr::filter(date <= enddate)
 
 # add in initial NA data at t = 0 for all states to make initial estimation easier
@@ -112,8 +101,10 @@ first_date <- all_states_pomp_data %>%
 
 all_states_pomp_data <- bind_rows(first_date, all_states_pomp_data)
 
-all_states_pomp_covar <- loadcleanucmobility(location = statevec, 
-                                             pomp_data = all_states_pomp_data) %>% 
+all_states_pomp_covar <- loadcleanucmobility(
+  location = statevec,
+  pomp_data = all_states_pomp_data
+) %>%
   dplyr::filter(date <= enddate)
 
 
@@ -197,15 +188,16 @@ for (i in 1:length(statevec))
     )
   
   # Set the parameter values and initial conditions
-  par_var_list <- setparsvars_warm(iniparvals = iniparvals, # list or "fresh"
-                                   est_these_pars = c(est_these_pars, knot_coefs), 
-                                   est_these_inivals = est_these_inivals,
-                                   population = statedf %>% 
-                                     filter(state_full == dolocation) %>% pull(total_pop),
-                                   n_knots = n_knots,
-                                   # set R0 at beginning of epidemic
-                                   rnaught = statedf %>% 
-                                     filter(state_full == dolocation) %>% pull(initR0))  
+  par_var_list <- setparsvars(
+    est_these_pars = c(est_these_pars, knot_coefs),
+    est_these_inivals = est_these_inivals,
+    population = statedf %>%
+      filter(state_full == dolocation) %>% pull(total_pop),
+    n_knots = n_knots,
+    # set R0 at beginning of epidemic
+    rnaught = statedf %>%
+      filter(state_full == dolocation) %>% pull(initR0)
+  )  
   
   # add beta inits to par_var_bounds
   beta_names <- paste0("b", 1:n_knots)
@@ -244,8 +236,6 @@ for (i in 1:length(statevec))
   pomp_list[[i]]$pomp_covar <- covar
   pomp_list[[i]]$location <- dolocation
   pomp_list[[i]]$par_var_list <- par_var_list
-  pomp_list[[i]]$mifruns <- statedf %>% 
-    filter(state_full == dolocation) %>% pull(mifruns)
   
 } #done serial loop over all states that creates pomp object and other info 
 
