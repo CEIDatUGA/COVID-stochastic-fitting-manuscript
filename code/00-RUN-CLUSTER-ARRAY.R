@@ -55,7 +55,7 @@ PF_LL_REPS <- ifelse(TEST, 2, 20)
 PF_STATES_PARTICLES <- ifelse(TEST, 100, 2500)
 
 # number of replication particle filters for smoothed posterior states
-PF_STATES_REPS <- ifelse(TEST, 2, 1000)
+PF_STATES_REPS <- ifelse(TEST, 10, 1000)
 
 
 
