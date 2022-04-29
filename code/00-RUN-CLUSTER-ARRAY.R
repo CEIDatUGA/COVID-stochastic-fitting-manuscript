@@ -1,22 +1,66 @@
-# 00-MASTER-LOCAL-CLUSTER.R
 # This script is designed to run the entire workflow for estimating
 # parameters for the stochastic COVID-19 model and for producing
-# estimates of observed states and forecasts of states. 
-
-# --------------------------------------------------
-# --------------------------------------------------
-# General setup
-# --------------------------------------------------
-# --------------------------------------------------
+# estimates of observed states. This script is designed to be run
+# on a computing cluster.
 
 
-# Start with a clean workspace to avoid downstream errors -----------------
+
+# Clean the workspace -----------------------------------------------------
+
 rm(list = ls(all.names = TRUE))
 
-# --------------------------------------------------
-# Load necessary libraries 
-# --------------------------------------------------
-# could be loaded here or inside functions
+
+
+# Set global options ------------------------------------------------------
+
+TEST <- TRUE  # FALSE for production run
+LOCAL <- TRUE  # FALSE for cluster run
+
+# set state id if running on local machine
+if(LOCAL) a = 1
+
+# run in parallel (TRUE) or not (FALSE)
+PARALLEL_FLAG <- ifelse(TEST, TRUE, TRUE)
+
+# number of cores to parallelize across
+NUM_CORES <- ifelse(TEST, 2, 32)  
+
+# number of particles for each mif2 iterations
+MIF_PARTICLES <- ifelse(TEST, 200, 3500)  
+
+# cooling fractions for each of 4 mif2 rounds
+MIF_COOLING <- c(1, 0.9,  # rounds 1 & 2 in batch 1
+                 1, 0.5)  # rounds 1 & 2 in batch 2
+
+# number of iterations per each of 4 mif2 rounds
+if(TEST) {
+  MIF_ITERATIONS <- c(20, 20,  # iterations for rounds 1 & 2 in batch 1
+                      10, 10)  # iterations for rounds 1 & 2 in batch 2
+} else {
+  MIF_ITERATIONS <- c(200, 100,  # iterations for rounds 1 & 2 in batch 1
+                      50, 50)  # iterations for rounds 1 & 2 in batch 2
+}
+
+# number of independent mif2 runs, run in parallel with different 
+# parameter starting conditions
+MIF_RUNS <- ifelse(TEST, 2, 100)  
+
+# number of particles for pfilter loglik estimation
+PF_LL_PARTICLES <- ifelse(TEST, 10, 5000)
+
+# number of replicate pfilters for loglik estimation
+PF_LL_REPS <- ifelse(TEST, 2, 20)
+
+# number of particles per pfitler for smoothed posterior states
+PF_STATES_PARTICLES <- ifelse(TEST, 100, 2500)
+
+# number of replication particle filters for smoothed posterior states
+PF_STATES_REPS <- ifelse(TEST, 2, 1000)
+
+
+
+# Load libraries ----------------------------------------------------------
+
 library('lubridate') #needs to loaded first so it doesn't mess with 'here'
 library('readr')
 library('doParallel')
@@ -31,11 +75,11 @@ library('vctrs')
 library('tibble')
 
 
-# --------------------------------------------------
-# Read in indexing argument for states
-# --------------------------------------------------
-args = (commandArgs(TRUE))
-##args is now a list of character vectors
+
+# Read in id argument from the bash script --------------------------------
+# this indicates which state to run
+args <- (commandArgs(TRUE))
+## args is now a list of character vectors
 ## First check to see if arguments are passed.
 ## Then cycle through each element of the list and evaluate the expressions.
 if(length(args)==0){
@@ -45,109 +89,98 @@ if(length(args)==0){
     eval(parse(text=args[[i]]))
   }
 }
-myargument = as.numeric(a)
+myargument <- as.numeric(a)  # numeric id for indexing list of pomp objects
 
 
-# --------------------------------------------------
-# Source all needed functions/scripts
-# --------------------------------------------------
-source("../code/model-fitting/runmif_allstates_array.R") #runs mif fitting
-source("../code/result-exploration/exploremifresults.R") #explore mif results
-source("../code/forward-simulations/simulate_trajectories.R")
-source("../code/forward-simulations/runscenarios.R") #run forward simulations for best fit mif results
-source("../code/model-setup/makepompmodel.R") #function that generates the pomp model
-source("../code/forward-simulations/summarize_simulations.R")
 
-# Load the pomp information
-pomp_listr <- readRDS("../header/pomp_list.rds")
-this_pomp <- pomp_listr[[myargument]]
-n_knots <- round(nrow(this_pomp$pomp_data) / 21 )
+# Source functions --------------------------------------------------------
 
-# --------------------------------------------------
-# Specify if functions that are able to run in parallel will do so
-# if yes, set parallel options
-# --------------------------------------------------
+source("../code/model-setup/makepompmodel.R") # function that generates the pomp model
+source("../code/model-fitting/runmif_allstates_array.R") # runs mif fitting
+source("../code/result-exploration/exploremifresults.R") # explore/summarise mif results
 
-# turn on parallel running or not
-parallel_info = list()
-parallel_info$parallel_run <- TRUE
-# parallel_info$num_cores <- 200  # on HPC - this is the number of independent MIF runs per state
-parallel_info$num_cores <- 5  # on HPC - test run with 32 independent MIF runs pre state
 
-#to estimate run-time: 
-#run interactively non-parallel with planned MIF settings (possibly lower MIF replicates)
-#watch output to see how long 1 state takes
-#main loop is done 5x, 10 states each. 
-#so if core number is 10 x mif runs (replicates), speed is 5x single state (max speed)
-#for less cores or more/less MIF replicates, multiply by the appropriate factor
-#on my machine,  2000 particles, 150 iterations and 5 reps on 50 cores takes 75min per 
-#batch of states, so total 5 x 75
-#if we do 20 mif reps on 200 cores on cluster, should be same duration
 
-# --------------------------------------------------
-# Specify settings for MIF fitting
-# --------------------------------------------------
-# two rounds of MIF are currently hard-coded into runmif
-mif_settings = list()
-mif_settings$mif_num_particles  <- c(200,200)
-iters <- this_pomp$mifruns %>% unlist()
-mif_settings$mif_num_iterations <- c(5,5) # iters[1:2]
-mif_settings$pf_num_particles <- 5000#particles for filter run following mif
-mif_settings$pf_reps <- 10 #replicates for particle filter following mif
-mif_settings$mif_cooling_fracs <- c(1, 1)
-mif_settings$replicates <- parallel_info$num_cores #number of different starting conditions - this is parallelized
+# Load the pomp information for this state --------------------------------
 
-# --------------------------------------------------
-# Create a time-stamp variable
-# Will be applied to saved results
-# defined outside loop so it's the same for each state
-# --------------------------------------------------
+pomp_listr <- readRDS("../header/pomp_list.rds")  # pomp info for all states
+this_pomp <- pomp_listr[[myargument]]  # pomp info for this state
+
+# set the number of spline knots to one every 21 days
+# this defines the knots for the latent trend spline fit
+n_knots <- round(nrow(this_pomp$pomp_data) / 21 ) 
+
+# time stamp for current run
 timestamp <- readRDS("../header/timestamp.rds")
 
+
+
+# Set parallel options ----------------------------------------------------
+
+parallel_info <- list()  # an empty list to hold all arguments
+parallel_info$parallel_run <- PARALLEL_FLAG  # run in parallel
+parallel_info$num_cores <- NUM_CORES  # number of cores to parallelize across
+
+
+
+# Set arguments for pomp::mif2 --------------------------------------------
+
+mif_settings <- list()  # an empty list for mif2 settings
+mif_settings$mif_num_particles  <- MIF_PARTICLES
+mif_settings$mif_num_iterations <- MIF_ITERATIONS[1:2]
+mif_settings$mif_cooling_fracs <- MIF_COOLING[1:2]
+mif_settings$replicates <- MIF_RUNS
+mif_settings$pf_num_particles <- PF_LL_PARTICLES
+mif_settings$pf_reps <- PF_LL_REPS
+
   
-# --------------------------------------------------
-# Loop over states  
-# done in parallel and batches of 10 states each
-# --------------------------------------------------
 
-# states_map <- tibble(state = state.name) %>%
-#   mutate(num = 1:n()) %>%
-#   filter(state %in% c("New York", "Washington"))
-# myargument <- states_map %>%
-#   slice(myargument) %>%
-#   pull(num)
 
-# Make the pomp model
-pomp_model <- makepompmodel(par_var_list = this_pomp$par_var_list, 
-                            pomp_data = this_pomp$pomp_data, 
-                            pomp_covar = this_pomp$pomp_covar,
-                            n_knots = n_knots)
+# Generate the pomp model object ------------------------------------------
+
+pomp_model <- makepompmodel(
+  par_var_list = this_pomp$par_var_list,
+  pomp_data = this_pomp$pomp_data,
+  pomp_covar = this_pomp$pomp_covar,
+  n_knots = n_knots
+)
+
+# save in the `this_pomp` list
 this_pomp$pomp_model <- pomp_model
 
 
-# Run first batch of MIF
-mif_res1 <- runmif_allstates(parallel_info = parallel_info, 
-                            mif_settings = mif_settings, 
-                            pomp_list = this_pomp, 
-                            par_var_list = this_pomp$par_var_list)
 
-pomp_res1 <- this_pomp #current state
-pomp_res1$mif_res <- mif_res1
+# Run first batch of 2 mif rounds -----------------------------------------
 
-mif_explore <- exploremifresults(pomp_res = pomp_res1, 
-                                 par_var_list = pomp_res1$par_var_list,
-                                 n_knots = n_knots) #compute trace plot and best
+mif_res1 <- runmif_allstates(
+  parallel_info = parallel_info,
+  mif_settings = mif_settings,
+  pomp_list = this_pomp,
+  par_var_list = this_pomp$par_var_list
+)
 
-# SAVE objects for debugging. Comment out before full run
-saveRDS(object = mif_res1, file = paste0('../output/mif_res1.rds')) 
-saveRDS(object = mif_explore, file = paste0('../output/mif_explore.rds'))  
+pomp_res1 <- this_pomp  # current state of affairs
+pomp_res1$mif_res <- mif_res1  # add the first mif result
+
+# generate traceplots and summarize fits
+mif_explore1 <- exploremifresults(
+  pomp_res = pomp_res1,
+  par_var_list = pomp_res1$par_var_list,
+  n_knots = n_knots
+) 
+
+pomp_res1$mif_explore <- mif_explore1
+
+
+
+# Generate new starting parameter sets for final mif batch ----------------
 
 # sample parameter sets with loglikelihood weights
 nsample <- mif_settings$replicates
-sets <- mif_explore$est_partable %>%
+sets <- mif_explore1$est_partable %>%
   filter(!is.nan(LogLik)) %>%
   arrange(-LogLik) %>%
-  filter(LogLik >= (max(LogLik)-2))
+  filter(LogLik >= (max(LogLik)-10))  # all sets within 10 loglik
 lls <- sets$LogLik
 weights <- exp(lls-mean(lls))
 weights <- weights / sum(weights)
@@ -168,77 +201,81 @@ for(i in rids) {
   tmp <- bind_cols(fixed, tmp)
   newparams <- bind_rows(newparams, tmp)
 }
+
+# overwrite the initial par_var_bound
+bounds <- this_pomp$par_var_list$par_var_bounds  # add back in later
 this_pomp$par_var_list$par_var_bounds <- NULL  # empty out the ranges
 this_pomp$par_var_list$allparvals_update <- newparams
 
-# rerun MIF batch at new starting parameters
-mif_settings = list()
-mif_settings$mif_num_particles  <- c(2000,2000)
-iters <- this_pomp$mifruns %>% unlist()
-mif_settings$mif_num_iterations <- iters[3:4]
-mif_settings$pf_num_particles <- 50000 #particles for filter run following mif
-mif_settings$pf_reps <- 20 #replicates for particle filter following mif
-mif_settings$mif_cooling_fracs <- c(1, 0.9)
-mif_settings$replicates <- nrow(newparams) #number of different starting conditions - this is parallelized
 
-mif_res2 <- runmif_allstates(parallel_info = parallel_info, 
-                             mif_settings = mif_settings, 
-                             pomp_list = this_pomp, 
-                             par_var_list = this_pomp$par_var_list)
+# Run final mif batch (2 rounds per replicate) ----------------------------
 
-pomp_res = this_pomp #current state
-pomp_res$mif_res = mif_res2
+# redefine mif2 settings
+mif_settings <- list()  # an empty list for mif2 settings
+mif_settings$mif_num_particles  <- MIF_PARTICLES
+mif_settings$mif_num_iterations <- MIF_ITERATIONS[3:4]
+mif_settings$mif_cooling_fracs <- MIF_COOLING[3:4]
+mif_settings$replicates <- MIF_RUNS
+mif_settings$pf_num_particles <- PF_LL_PARTICLES
+mif_settings$pf_reps <- PF_LL_REPS
 
-mif_explore <- exploremifresults(pomp_res = pomp_res, 
-                                 par_var_list = pomp_res$par_var_list,
-                                 n_knots = n_knots) #compute trace plot and best
+# run batch 2 of mif
+mif_res2 <- runmif_allstates(
+  parallel_info = parallel_info,
+  mif_settings = mif_settings,
+  pomp_list = this_pomp,
+  par_var_list = this_pomp$par_var_list
+)
 
-#add resutls computed to the pomp_res object
-pomp_res$traceplot = mif_explore$traceplot
-pomp_res$all_partable = mif_explore$all_partable
-pomp_res$est_partable = mif_explore$est_partable
-pomp_res$partable_natural = mif_explore$partable_natural
+pomp_res2 <- this_pomp  # current state of affairs
+pomp_res2$mif_res <- mif_res2  # store mif results
 
-# pomp_res$mif_res <- NULL #to save space, one can delete the full mif results before saving
+# generate traceplots and summarize fits
+mif_explore2 <- exploremifresults(
+  pomp_res = pomp_res2,
+  par_var_list = pomp_res2$par_var_list,
+  n_knots = n_knots
+)
 
-# Simulate from the model at best MLE
-params <- pomp_res$all_partable %>%
+
+# add results computed to the pomp_res object
+pomp_res2$traceplot <- mif_explore2$traceplot
+pomp_res2$all_partable <- mif_explore2$all_partable
+pomp_res2$est_partable <- mif_explore2$est_partable
+pomp_res2$partable_natural <- mif_explore2$partable_natural
+
+
+
+# Estimate smoothed posteriors of states for analysis ---------------------
+# see Fox et al. PNAS, 2022 and, 
+# https://github.com/kingaa/pomp/issues/74
+
+# extract MLEs
+params <- pomp_res2$all_partable %>%
   arrange(-LogLik) %>%
   slice(1) %>%
-  mutate(log_beta_s = -16.9) %>%
   dplyr::select(-MIF_ID, -LogLik, -LogLik_SE) %>%
   gather() %>%
   tibble::deframe()
-sim <- pomp::simulate(pomp_res$pomp_model, params = params, 
-                      nsim = 100, format = "data.frame")
 
-head(sim)
-ggplot(sim, aes(x = time, y = cases)) +
-  geom_line(aes(group = .id)) +
-  geom_point(data= this_pomp$pomp_data, aes(x = time, y = cases),
-             color = "blue")
-
-# pomp_res$sims <- sim 
-
-## smoothed posterior estimates
-pf_reps <- 50  # 1000 production
-pf_num_particles <- 1000  # 2500 production
-pf <- replicate(n = pf_reps, pfilter(this_pomp$pomp_model,
-                                     params = params,
-                                     Np = pf_num_particles,
-                                     filter.traj= TRUE,
-                                     save.states = TRUE,
-                                     max.fail = Inf))
+foreach(i = 1:PF_STATES_REPS, 
+        .packages = c("pomp")) %dopar% {
+  pfilter(
+    this_pomp$pomp_model,
+    params = params,
+    Np = PF_STATES_PARTICLES,
+    filter.traj = TRUE,
+    save.states = TRUE,
+    max.fail = Inf
+  )
+} -> pf
 
 
-### https://github.com/kingaa/pomp/issues/74
-
+# Combine the smoothed posterior state trajectories 
+# for smoothed posterior distribution
 filter_states <- tibble()
 for(i in 1:length(pf)) {
   tmp <- pf[[i]]
-  # tmparr <- array(unlist(tmp@saved.states), 
-  #                  dim = c(dim(tmp@saved.states[[1]]), length(tmp@saved.states)))
-  # id <- sample(1:pf_num_particles, 1)
   tmparr <- tmp@filter.traj[,1,]
   tmpout <- t(tmparr)
   colnames(tmpout) <- rownames(tmp@saved.states[[1]])
@@ -251,133 +288,24 @@ for(i in 1:length(pf)) {
   filter_states <- bind_rows(filter_states, tmpout)
 }
 
-filter_states %>%
-  dplyr::select(time, pf_rep, C_new) %>%
-  group_by(time) %>%
-  summarise(med_cases = median(C_new),
-            lower_cases = quantile(C_new, 0.025),
-            upper_cases = quantile(C_new, 0.975)) %>%
-  ggplot(aes(x = time, y = med_cases)) +
-  geom_point(data= this_pomp$pomp_data, aes(x = time, y = cases),
-             color = "blue", size = 0.5) +
-  geom_ribbon(aes(ymin = lower_cases, ymax = upper_cases), alpha = 0.2) +
-  geom_line() +
-  theme_classic()
 
 
+# Save results ------------------------------------------------------------
 
+outdir <- "../output/"
+state <- this_pomp$location
 
-#save the completed analysis for each state to a file with time-stamp
-#this file could be large, needs checking
-filename = paste0('../output/', pomp_res$filename_label, '_results.rds')
-saveRDS(object = pomp_res, file = filename)
+# empty pomp model object
+this_pomp$par_var_list$par_var_bounds <- bounds  # add back in
+saveRDS(this_pomp, file = paste0(outdir, state, "-pomp_model.RDS"))
 
-# Run scenarios
-pomp_res$scenarios <- runscenarios(pomp_res, par_var_list = pomp_res$par_var_list)
-filename = paste0('../output/', pomp_res$filename_label, '_results.rds')
-saveRDS(object = pomp_res, file = filename)  # resave...
+# batch 1 mif results
+saveRDS(pomp_res1, file = paste0(outdir, state, "-mif_res_1.RDS"))
 
-# Summarize results
-res_summary <- summarize_simulations(sims_out = pomp_res$scenarios, 
-                                     pomp_data = pomp_res$pomp_data,
-                                     pomp_covar = pomp_res$pomp_covar, 
-                                     location = pomp_res$location,
-                                     mle_sim = pomp_res$sims)
+# batch 2 mif results
+saveRDS(pomp_res2, file = paste0(outdir, state, "-mif_res_2.RDS"))
 
-# Store for benchmarking
-rundate <- strsplit(timestamp, split = "-")[[1]][1:3]
-rundate <- paste0(rundate, collapse = "-")
-outdir <- paste0("../output/", rundate, "/")
-outfile <- paste0(outdir, pomp_res$filename_label, '.csv')
-write.csv(res_summary, outfile, row.names = FALSE)
+# filtered state distribution
+saveRDS(filter_states, file = paste0(outdir, state, "-filtered_states.RDS"))
 
-# Store for updating
-outdir <- "../output/current/"
-# fname <- strsplit(pomp_res$filename_label, split = "-")[[1]][1:2]
-# fname <- paste0(fname, collapse = "-")
-outfile <- paste0(outdir, pomp_res$filename_label, '.csv')
-write.csv(res_summary, outfile, row.names = FALSE)
-
-# Store parameter estimates
-saveRDS(pomp_res$partable_natural, file = paste0("../output/current/", pomp_res$filename_label, "-params-natural.rds"))
-outdir <- paste0("../output/", rundate, "/")
-outfile <- paste0(outdir, 'parameter-estimates-', pomp_res$filename_label ,'.rds')
-saveRDS(params, file = outfile)
-
-outdir <- paste0("../output/current/")
-outfile <- paste0(outdir, 'parameter-estimates-', pomp_res$filename_label ,'.rds')
-saveRDS(params, file = outfile)
-
-
-# all_df = rbind(all_df, all_scenarios) #add all states together into a long data frame, will be saved below and used by shiny
-
-
-# #this is what shiny will use
-# filename = here('output','results_for_shiny.rds')
-# saveRDS(all_df,filename)  
-
-
-# all_files <- list.files("../output/cache/2020-06-11", pattern = ".rds")
-# for(do_file in all_files) {
-#   pomp_res <- readRDS(paste0("../output/cache/2020-06-11/", do_file))
-#   # Summarize results
-#   res_summary <- summarize_simulations(sims = pomp_res$scenarios$sims,
-#                                        pomp_data = pomp_res$pomp_data,
-#                                        pomp_covar = pomp_res$pomp_covar,
-#                                        location = pomp_res$location,
-#                                        mle_sim = pomp_res$sims)
-# 
-#   # Store for benchmarking
-#   rundate <- strsplit(pomp_res$filename_label, split = "-")[[1]][3:5]
-#   rundate <- paste0(rundate, collapse = "-")
-#   outdir <- paste0("../output/", rundate, "/")
-#   outfile <- paste0(outdir, pomp_res$filename_label, '.csv')
-#   write.csv(res_summary, outfile, row.names = FALSE)
-# 
-#   # Store for updating
-#   outdir <- "../output/current/"
-#   fname <- strsplit(pomp_res$filename_label, split = "-")[[1]][1:2]
-#   fname <- paste0(fname, collapse = "-")
-#   outfile <- paste0(outdir, fname, '.csv')
-#   write.csv(res_summary, outfile, row.names = FALSE)
-# 
-#   # Store parameter estimates
-#   saveRDS(pomp_res$partable_natural, file = paste0("../output/current/", fname, "-params.rds"))
-# }
-
-
-# all_files <- list.files("../output/", pattern = ".rds")
-# for(do_file in all_files) {
-#   pomp_res <- readRDS(paste0("../output/", do_file))
-#   # Summarize results
-#   res_summary <- summarize_simulations(sims_out = pomp_res$scenarios, 
-#                                        pomp_data = pomp_res$pomp_data,
-#                                        pomp_covar = pomp_res$pomp_covar, 
-#                                        location = pomp_res$location,
-#                                        mle_sim = pomp_res$sims)
-# 
-#   # Store for benchmarking
-#   rundate <- strsplit(pomp_res$filename_label, split = "-")[[1]][3:5]
-#   rundate <- paste0(rundate, collapse = "-")
-#   outdir <- paste0("../output/", rundate, "/")
-#   outfile <- paste0(outdir, pomp_res$filename_label, '.csv')
-#   write.csv(res_summary, outfile, row.names = FALSE)
-# 
-#   # Store for updating
-#   outdir <- "../output/current/"
-#   fname <- strsplit(pomp_res$filename_label, split = "-")[[1]][1:2]
-#   fname <- paste0(fname, collapse = "-")
-#   outfile <- paste0(outdir, fname, '.csv')
-#   write.csv(res_summary, outfile, row.names = FALSE)
-# 
-#   # Store parameter estimates
-#   saveRDS(pomp_res$partable_natural, file = paste0("../output/current/", fname, "-params.rds"))
-# }
-# 
-
-# pass state dataframe to /output/current
-saveRDS(
-  readRDS("../header/statedf.rds"), 
-  file = paste0(outdir,"statedf.rds")
-  )
 

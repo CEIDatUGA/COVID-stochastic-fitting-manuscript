@@ -56,7 +56,7 @@ exploremifresults <- function(pomp_res, par_var_list, n_knots)
   #make a plot of traces for all mif runs  
   pl1 <- mif_df %>% ggplot(aes(x=iteration,y=value,group= mif_run, color=factor(variable)))+
     geom_line()+
-    guides(color=FALSE)+
+    guides(color="none")+
     facet_wrap(~variable,scales="free_y")+
     theme_bw()
   

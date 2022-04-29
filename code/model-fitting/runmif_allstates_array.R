@@ -80,7 +80,7 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
     out_mif <- pomp::mif2(pomp_model, # first part of mif run to converge
                           Nmif = num_mif_iterations[1], 
                           params = start_params, 
-                          Np = num_particles[1], 
+                          Np = num_particles, 
                           cooling.fraction.50 = c_frac[1], 
                           rw.sd = param_perts,
                           cooling.type = "geometric",
@@ -88,7 +88,7 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
     
     out_mif <- pomp::continue(out_mif, # 2nd part of mif run
         Nmif = num_mif_iterations[2],
-        Np = num_particles[2], 
+        Np = num_particles, 
         cooling.fraction.50 = c_frac[2], 
         cooling.type = "geometric",
         verbose = verbose)
