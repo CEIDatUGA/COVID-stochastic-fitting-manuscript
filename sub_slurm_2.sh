@@ -8,7 +8,7 @@
 #SBATCH --time=7-0:00:00            # Time limit days-hrs:min:sec
 #SBATCH --array=5                   # 1-51 for all state + DC
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=emarty@uga.edu    # Where to send mail
+#SBATCH --mail-user=atredenn@gmail.com    # Where to send mail
 
 cd $SLURM_SUBMIT_DIR
 
