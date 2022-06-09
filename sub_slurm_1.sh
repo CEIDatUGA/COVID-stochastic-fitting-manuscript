@@ -8,7 +8,7 @@
 #SBATCH --error=covstateshdr.%j.err   # Standard error log
 
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=emarty@uga.edu    # Where to send mail
+#SBATCH --mail-user=atredennick@gmail.com    # Where to send mail
 
 cd $SLURM_SUBMIT_DIR
 
