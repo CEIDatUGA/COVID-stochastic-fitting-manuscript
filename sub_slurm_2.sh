@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --mem-per-cpu=3500M          # Job memory request
 #SBATCH --time=7-0:00:00            # Time limit days-hrs:min:sec
-#SBATCH --array=5                   # 1-51 for all state + DC
+#SBATCH --array=1                   # 1-51 for all state + DC
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=atredenn@gmail.com    # Where to send mail
 
