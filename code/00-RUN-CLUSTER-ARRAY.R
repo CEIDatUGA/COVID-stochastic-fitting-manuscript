@@ -13,7 +13,7 @@ rm(list = ls(all.names = TRUE))
 
 # Set global options ------------------------------------------------------
 
-TEST <- TRUE  # FALSE for production run
+TEST <- FALSE  # FALSE for production run
 LOCAL <- FALSE  # FALSE for cluster run
 
 # set state id if running on local machine

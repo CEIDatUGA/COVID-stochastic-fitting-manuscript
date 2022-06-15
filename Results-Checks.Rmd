@@ -1,0 +1,57 @@
+---
+title: "Filtered States Fits"
+author: "Andrew Tredennick"
+date: '2022-06-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+
+all_files <- list.files("./output/")
+states <- lapply(str_split(all_files, "-"), `[[`, 1) %>%
+  unlist() %>%
+  unique()
+states <- states[states != "placeholder"]
+
+for(s in states) {
+  files <- all_files[grepl(s, all_files)]
+  fs_file <- paste0("./output/", files[grepl("filtered_states", files)])
+  po_file <- paste0("./output/", files[grepl("pomp_model", files)])
+  
+  filtered_states <- readRDS(fs_file)
+  pomp_model <- readRDS(po_file)
+  
+  dat <- pomp_model$pomp_data %>%
+    dplyr::select(time, cases, deaths) %>%
+    pivot_longer(cols = cases:deaths)
+  
+  ests <- filtered_states %>%
+    dplyr::select(time, C_new, D_new) %>%
+    rename("cases" = C_new,
+           "deaths" = D_new) %>%
+    pivot_longer(cols = cases:deaths) %>%
+    group_by(time, name) %>%
+    summarise(mean = mean(value),
+              lower = quantile(value, 0.025),
+              upper = quantile(value, 0.975),
+              .groups = "drop")
+  
+  p <- ggplot() +
+    geom_point(data = dat, aes(x = time, y = value)) +
+    geom_ribbon(data = ests,
+                aes(x = time, ymin = lower, ymax = upper), 
+                alpha = 0.25, 
+                fill = "blue") +
+    geom_line(data = ests, aes(x = time, y = mean), color = "blue", size= 1) +
+    facet_wrap(~name, scales = "free_y") +
+    ggtitle(pomp_model$location)
+  plot(p)
+}
+
+
+```
