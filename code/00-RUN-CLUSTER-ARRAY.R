@@ -54,7 +54,7 @@ PF_LL_REPS <- ifelse(TEST, 2, 20)
 # number of particles per pfitler for smoothed posterior states
 PF_STATES_PARTICLES <- ifelse(TEST, 100, 2500)
 
-# number of replication particle filters for smoothed posterior states
+# number of replicate particle filters for smoothed posterior states
 PF_STATES_REPS <- ifelse(TEST, 10, 1000)
 
 
@@ -171,6 +171,17 @@ mif_explore1 <- exploremifresults(
 
 pomp_res1$mif_explore <- mif_explore1
 
+# intermediate save of fits
+outdir <- "../output/"
+state <- this_pomp$location
+
+# empty pomp model object
+this_pomp$par_var_list$par_var_bounds <- bounds  # add back in
+saveRDS(this_pomp, file = paste0(outdir, state, "-pomp_model.RDS"))
+
+# batch 1 mif results
+saveRDS(pomp_res1, file = paste0(outdir, state, "-mif_res_1.RDS"))
+
 
 
 # Generate new starting parameter sets for final mif batch ----------------
@@ -244,6 +255,8 @@ pomp_res2$all_partable <- mif_explore2$all_partable
 pomp_res2$est_partable <- mif_explore2$est_partable
 pomp_res2$partable_natural <- mif_explore2$partable_natural
 
+# batch 2 mif results
+saveRDS(pomp_res2, file = paste0(outdir, state, "-mif_res_2.RDS"))
 
 
 # Estimate smoothed posteriors of states for analysis ---------------------
@@ -288,23 +301,7 @@ for(i in 1:length(pf)) {
   filter_states <- bind_rows(filter_states, tmpout)
 }
 
-
-
-# Save results ------------------------------------------------------------
-
-outdir <- "../output/"
-state <- this_pomp$location
-
-# empty pomp model object
-this_pomp$par_var_list$par_var_bounds <- bounds  # add back in
-saveRDS(this_pomp, file = paste0(outdir, state, "-pomp_model.RDS"))
-
-# batch 1 mif results
-saveRDS(pomp_res1, file = paste0(outdir, state, "-mif_res_1.RDS"))
-
-# batch 2 mif results
-saveRDS(pomp_res2, file = paste0(outdir, state, "-mif_res_2.RDS"))
-
+# save final states
 # filtered state distribution
 saveRDS(filter_states, file = paste0(outdir, state, "-filtered_states.RDS"))
 

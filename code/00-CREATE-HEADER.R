@@ -11,11 +11,14 @@ rm(list = ls(all.names = TRUE))
 
 # Set global parameters ---------------------------------------------------
 
-TEST <- TRUE
+TEST <- FALSE
 DATA_SOURCE <- "JHU"
 END_DATE <- as.Date("2020-12-31")
-STATES <- ifelse(TEST, "Georgia", c(state.name, "District of Columbia"))
-
+if(TEST) {
+  STATES <- "Georgia"
+} else {
+  STATES <- c(state.name, "District of Columbia")
+}
 
 
 # Load libraries ----------------------------------------------------------
