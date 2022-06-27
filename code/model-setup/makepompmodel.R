@@ -221,7 +221,7 @@ makepompmodel <- function(par_var_list, pomp_data, pomp_covar, n_knots)
     D += trans[28];
     D_new += trans[28];  // new deaths tracker, reset at obs times
     
-    trendO = trend;
+    trendO = trend * dW/dt;
     "
   )
   

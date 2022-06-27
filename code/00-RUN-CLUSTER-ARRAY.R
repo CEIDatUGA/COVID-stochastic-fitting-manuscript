@@ -13,7 +13,7 @@ rm(list = ls(all.names = TRUE))
 
 # Set global options ------------------------------------------------------
 
-TEST <- FALSE  # FALSE for production run
+TEST <- TRUE  # FALSE for production run
 LOCAL <- FALSE  # FALSE for cluster run
 
 # set state id if running on local machine
@@ -175,10 +175,6 @@ pomp_res1$mif_explore <- mif_explore1
 outdir <- "../output/"
 state <- this_pomp$location
 
-# empty pomp model object
-this_pomp$par_var_list$par_var_bounds <- bounds  # add back in
-saveRDS(this_pomp, file = paste0(outdir, state, "-pomp_model.RDS"))
-
 # batch 1 mif results
 saveRDS(pomp_res1, file = paste0(outdir, state, "-mif_res_1.RDS"))
 
@@ -305,4 +301,8 @@ for(i in 1:length(pf)) {
 # filtered state distribution
 saveRDS(filter_states, file = paste0(outdir, state, "-filtered_states.RDS"))
 
+# save pomp object list
+# empty pomp model object
+this_pomp$par_var_list$par_var_bounds <- bounds  # add back in
+saveRDS(this_pomp, file = paste0(outdir, state, "-pomp_model.RDS"))
 
