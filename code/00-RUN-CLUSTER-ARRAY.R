@@ -13,7 +13,7 @@ rm(list = ls(all.names = TRUE))
 
 # Set global options ------------------------------------------------------
 
-TEST <- TRUE  # FALSE for production run
+TEST <- FALSE  # FALSE for production run
 LOCAL <- FALSE  # FALSE for cluster run
 
 # set state id if running on local machine
@@ -37,7 +37,7 @@ if(TEST) {
   MIF_ITERATIONS <- c(20, 20,  # iterations for rounds 1 & 2 in batch 1
                       10, 10)  # iterations for rounds 1 & 2 in batch 2
 } else {
-  MIF_ITERATIONS <- c(200, 100,  # iterations for rounds 1 & 2 in batch 1
+  MIF_ITERATIONS <- c(100, 100,  # iterations for rounds 1 & 2 in batch 1
                       50, 50)  # iterations for rounds 1 & 2 in batch 2
 }
 
@@ -55,7 +55,7 @@ PF_LL_REPS <- ifelse(TEST, 2, 20)
 PF_STATES_PARTICLES <- ifelse(TEST, 100, 2500)
 
 # number of replicate particle filters for smoothed posterior states
-PF_STATES_REPS <- ifelse(TEST, 10, 1000)
+PF_STATES_REPS <- ifelse(TEST, 10, 500)
 
 
 

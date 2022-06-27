@@ -139,7 +139,7 @@ data_states_for_plot %>%
 
 # trends
 all_states_filters %>%
-  filter(location == "Georgia") %>%
+  filter(location == "Alaska") %>%
   dplyr::select(date, pf_rep, mobility, latent_trend) %>%
   pivot_longer(cols = c(mobility, latent_trend)) %>%
   group_by(date, name) %>%
@@ -149,7 +149,7 @@ all_states_filters %>%
             .groups = "drop") %>%
   ggplot(., aes(x = date, color = name, fill = name)) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
-              alpha = my_alpha) +
+              alpha = my_alpha, color = NA) +
   geom_line(aes(y = median_value), size = 0.75) +
   labs(x = NULL, y = "Relative transmission reduction", tag = "C") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") +
@@ -159,7 +159,7 @@ all_states_filters %>%
 
 # effective R
 all_states_filters %>%
-  filter(location == "Georgia") %>%
+  filter(location == "Alaska") %>%
   dplyr::select(date, pf_rep, R_e) %>%
   group_by(date) %>%
   summarise(median_value = median(R_e),
@@ -169,7 +169,7 @@ all_states_filters %>%
   ggplot(., aes(x = date)) +
   geom_hline(aes(yintercept = 1), linetype = 2) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
-              fill = my_color, alpha = my_alpha) +
+              fill = my_color, alpha = my_alpha, color = NA) +
   geom_line(aes(y = median_value), size = 0.75, color = my_color) +
   labs(x = NULL, y = "Reproduction number", tag = "D") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") -> re_plot
