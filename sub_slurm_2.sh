@@ -3,7 +3,7 @@
 #SBATCH --partition=batch         # Partition (queue) name
 #SBATCH --ntasks=1                    # Run on a single CPU
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=5
 #SBATCH --mem-per-cpu=6G          # Job memory request
 #SBATCH --time=7-0:00:00            # Time limit days-hrs:min:sec
 #SBATCH --array=1-2                   # 1-51 for all state + DC
