@@ -194,6 +194,7 @@ runmif_allstates <- function(parallel_info, mif_settings, pomp_list, par_var_lis
                               )
                     } #end double loop over states and starting values
     # stopCluster(cl)
+    stopImplicitCluster()
   } # end code section that does mif followed by pfilter for parallel setup
   
   # tend=Sys.time(); #capture current time

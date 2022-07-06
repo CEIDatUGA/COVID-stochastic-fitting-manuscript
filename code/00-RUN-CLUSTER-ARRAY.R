@@ -214,6 +214,10 @@ bounds <- this_pomp$par_var_list$par_var_bounds  # add back in later
 this_pomp$par_var_list$par_var_bounds <- NULL  # empty out the ranges
 this_pomp$par_var_list$allparvals_update <- newparams
 
+rm(mif_res1)
+rm(mif_explore1)
+rm(pomp_res1)
+gc(verbose = FALSE, reset = TRUE)
 
 # Run final mif batch (2 rounds per replicate) ----------------------------
 
@@ -235,7 +239,9 @@ mif_res2 <- runmif_allstates(
 )
 
 pomp_res2 <- this_pomp  # current state of affairs
+rm(this_pomp)
 pomp_res2$mif_res <- mif_res2  # store mif results
+rm(mif_res2)
 
 # generate traceplots and summarize fits
 mif_explore2 <- exploremifresults(
@@ -250,9 +256,13 @@ pomp_res2$traceplot <- mif_explore2$traceplot
 pomp_res2$all_partable <- mif_explore2$all_partable
 pomp_res2$est_partable <- mif_explore2$est_partable
 pomp_res2$partable_natural <- mif_explore2$partable_natural
+rm(mif_explore2)
 
 # batch 2 mif results
 saveRDS(pomp_res2, file = paste0(outdir, state, "-mif_res_2.RDS"))
+
+# clean up memory
+gc(verbose = FALSE, reset = TRUE)
 
 
 # Estimate smoothed posteriors of states for analysis ---------------------
@@ -267,35 +277,46 @@ params <- pomp_res2$all_partable %>%
   gather() %>%
   tibble::deframe()
 
+registerDoParallel(NUM_CORES)
 foreach(i = 1:PF_STATES_REPS, 
-        .packages = c("pomp")) %dopar% {
-  pfilter(
-    this_pomp$pomp_model,
+        .packages = c("pomp", "dplyr", "tibble"),
+        .combine = rbind) %dopar% {
+  pf <- pfilter(
+    pomp_res2$pomp_model,
     params = params,
     Np = PF_STATES_PARTICLES,
     filter.traj = TRUE,
     save.states = TRUE,
     max.fail = Inf
   )
-} -> pf
-
+  tmparr <- pf@filter.traj[,1,]
+  tmpout <- t(tmparr)
+  colnames(tmpout) <- rownames(pf@saved.states[[1]])
+  as.data.frame(tmpout) %>%
+    dplyr::mutate(time = 1:n(),
+                  pf_rep = i,
+                  loglik = pf@loglik) %>%
+    dplyr::select(time, pf_rep, loglik, dplyr::everything()) %>%
+    tibble::as_tibble()
+} -> filtered_states
+stopImplicitCluster()
 
 # Combine the smoothed posterior state trajectories 
 # for smoothed posterior distribution
-filter_states <- tibble()
-for(i in 1:length(pf)) {
-  tmp <- pf[[i]]
-  tmparr <- tmp@filter.traj[,1,]
-  tmpout <- t(tmparr)
-  colnames(tmpout) <- rownames(tmp@saved.states[[1]])
-  tmpout <- as.data.frame(tmpout) %>%
-    mutate(time = 1:n(),
-           pf_rep = i,
-           loglik = tmp@loglik) %>%
-    dplyr::select(time, pf_rep, loglik, everything()) %>%
-    as_tibble()
-  filter_states <- bind_rows(filter_states, tmpout)
-}
+# filter_states <- tibble()
+# for(i in 1:length(pf)) {
+#   tmp <- pf[[i]]
+#   tmparr <- tmp@filter.traj[,1,]
+#   tmpout <- t(tmparr)
+#   colnames(tmpout) <- rownames(tmp@saved.states[[1]])
+#   tmpout <- as.data.frame(tmpout) %>%
+#     mutate(time = 1:n(),
+#            pf_rep = i,
+#            loglik = tmp@loglik) %>%
+#     dplyr::select(time, pf_rep, loglik, everything()) %>%
+#     as_tibble()
+#   filter_states <- bind_rows(filter_states, tmpout)
+# }
 
 # save final states
 # filtered state distribution
