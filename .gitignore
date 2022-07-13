@@ -5,6 +5,8 @@
 
 output/cache/
 output-cache/
+output/*mif_res_1.RDS
+output/*mif_res_2.RDS
 
 *.Rproj
 README.html
