@@ -101,9 +101,29 @@ for(i in 1:length(all_mif_files)) {
 }
 
 
+# Beta <- params[paste0("b",1:16)]
+# Basis <- as.data.frame(t(pomp_res2$pomp_covar@table))[ , paste0("seas_",1:16)]
+# Basis <- as.matrix(Basis)
+# test <- t(Beta%*%t(Basis))[,1]
+# trend <- exp(test) / (1 + exp(test))
+
+# ppp <- pomp_res2$all_partable
+# trend <- matrix(ncol = nrow(ppp), nrow = nrow(pomp_res2$pomp_data))
+# for(i in 1:nrow(ppp)) {
+#   p <- ppp[i,]
+#   Beta <- as.numeric(p[paste0("b",1:14)])
+#   Basis <- as.data.frame(t(pomp_res2$pomp_covar@table))[ , paste0("seas_",1:14)]
+#   Basis <- as.matrix(Basis)
+#   test <- t(Beta%*%t(Basis))[,1]
+#   trend[ , i] <- exp(test) / (1 + exp(test))
+# }
+# 
+# matplot(trend, type = "l")
+
+
 # Plot GA fits and MASE ---------------------------------------------------
 
-example_state <- "Louisiana"
+example_state <- "Massachusetts"
 
 all_states_data %>%
   filter(location == example_state) %>%
@@ -158,9 +178,9 @@ all_states_filters %>%
   dplyr::select(date, pf_rep, mobility, latent_trend) %>%
   pivot_longer(cols = c(mobility, latent_trend)) %>%
   group_by(date, name) %>%
-  summarise(median_value = median(value),
-            lower_95_value = quantile(value, 0.025),
-            upper_95_value = quantile(value, 0.975), 
+  summarise(median_value = median(value, na.rm = TRUE),
+            lower_95_value = quantile(value, 0.025, na.rm = TRUE),
+            upper_95_value = quantile(value, 0.975, na.rm = TRUE), 
             .groups = "drop") %>%
   ggplot(., aes(x = date, color = name, fill = name)) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
@@ -177,9 +197,9 @@ all_states_filters %>%
   filter(location == example_state) %>%
   dplyr::select(date, pf_rep, R_e) %>%
   group_by(date) %>%
-  summarise(median_value = median(R_e),
-            lower_95_value = quantile(R_e, 0.025),
-            upper_95_value = quantile(R_e, 0.975), 
+  summarise(median_value = median(R_e, na.rm = TRUE),
+            lower_95_value = quantile(R_e, 0.025, na.rm = TRUE),
+            upper_95_value = quantile(R_e, 0.975, na.rm = TRUE), 
             .groups = "drop") %>%
   ggplot(., aes(x = date)) +
   geom_hline(aes(yintercept = 1), linetype = 2) +

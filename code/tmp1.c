@@ -1,6 +1,6 @@
 /* pomp C snippet file: tmp1 */
-/* Time: 2022-07-06 09:39:37.324 -0600 */
-/* Salt: 0BEA8542EDC85CAAE535CFA7 */
+/* Time: 2022-07-18 11:16:16.184 -0600 */
+/* Salt: 7E8AD69358177250784369E9 */
 
 #include <C:/Users/atredennick/Documents/R/win-library/4.1/pomp/include/pomp.h>
 #include <R_ext/Rdynload.h>
@@ -571,7 +571,7 @@ void __pomp_stepfn (double *__x, const double *__p, const int *__stateindex, con
     D += trans[28];
     D_new += trans[28];  // new deaths tracker, reset at obs times
     
-    trendO = trend * dW/dt;
+    trendO = trend;
      
 }
 
