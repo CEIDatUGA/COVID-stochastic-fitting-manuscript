@@ -3,13 +3,22 @@
 
 # Load libraries ----------------------------------------------------------
 
+# data wrangling
 library(tidyverse)
 library(lubridate)
+
+# modeling with pomp
 library(pomp)
+
+# plotting
 library(ggthemes)
 library(cowplot)
+library(geofacet)
 
+# set plotting theme
 ggplot2::theme_set(ggthemes::theme_few(base_size = 12))
+
+# source helper functions for derived quantities
 source("../code/result-exploration/getReff.R")
 
 
@@ -53,11 +62,30 @@ for(i in 1:length(all_mif_files)) {
     pivot_longer(cols = X1:X100) %>%
     dplyr::select(-is_fitted) %>%
     pivot_wider(names_from = parameter, values_from = value) %>%
-    filter(LogLik == min(LogLik))
+    filter(LogLik == max(LogLik))
+  
+  # calculate latent trend from basis functions and bspline coefs
+  beta <- this_params[names(this_params)[startsWith(names(this_params), "b")]]
+  beta <- beta %>% dplyr::select(-beta_s, -base_detect_frac)
+  beta <- as.numeric(beta)
+  B <- pomp::bspline.basis(
+    x = this_pomp$pomp_data$time,
+    degree = 3,
+    nbasis = length(beta)
+  )
+  mu <- B %*% beta  # expectation on estimation scale
+  trend <- exp(mu) / (1 + exp(mu))
+
+  # make it a dataframe for joining
+  trend_df <- tibble(
+    date = unique(this_data$date),
+    latent_trend = trend[2:length(trend)]  # ignore time 0
+  ) 
   
   this_filter <- this_filter %>%
     left_join(this_data %>% dplyr::select(date, time), by = "time") %>%
-    mutate(latent_trend = exp(trendO) / (1+exp(trendO))) %>%
+    left_join(trend_df, by = "date") %>%
+    # mutate(latent_trend = exp(trendO) / (1+exp(trendO))) %>%
     left_join(this_mobility, by = "time") %>%
     mutate(combined_trend = mobility*latent_trend) %>%
     mutate(N = this_population) %>%
@@ -101,29 +129,10 @@ for(i in 1:length(all_mif_files)) {
 }
 
 
-# Beta <- params[paste0("b",1:16)]
-# Basis <- as.data.frame(t(pomp_res2$pomp_covar@table))[ , paste0("seas_",1:16)]
-# Basis <- as.matrix(Basis)
-# test <- t(Beta%*%t(Basis))[,1]
-# trend <- exp(test) / (1 + exp(test))
-
-# ppp <- pomp_res2$all_partable
-# trend <- matrix(ncol = nrow(ppp), nrow = nrow(pomp_res2$pomp_data))
-# for(i in 1:nrow(ppp)) {
-#   p <- ppp[i,]
-#   Beta <- as.numeric(p[paste0("b",1:14)])
-#   Basis <- as.data.frame(t(pomp_res2$pomp_covar@table))[ , paste0("seas_",1:14)]
-#   Basis <- as.matrix(Basis)
-#   test <- t(Beta%*%t(Basis))[,1]
-#   trend[ , i] <- exp(test) / (1 + exp(test))
-# }
-# 
-# matplot(trend, type = "l")
-
 
 # Plot GA fits and MASE ---------------------------------------------------
 
-example_state <- "Massachusetts"
+example_state <- "Maryland"
 
 all_states_data %>%
   filter(location == example_state) %>%
@@ -178,7 +187,7 @@ all_states_filters %>%
   dplyr::select(date, pf_rep, mobility, latent_trend) %>%
   pivot_longer(cols = c(mobility, latent_trend)) %>%
   group_by(date, name) %>%
-  summarise(median_value = median(value, na.rm = TRUE),
+  summarise(median_value = mean(value, na.rm = TRUE),
             lower_95_value = quantile(value, 0.025, na.rm = TRUE),
             upper_95_value = quantile(value, 0.975, na.rm = TRUE), 
             .groups = "drop") %>%
@@ -570,7 +579,7 @@ output <- results %>%
     TRUE ~ "After May 1, 2020"
   )) %>%
   mutate(Label = factor(Label, levels = c("Before May 1, 2020", "After May 1, 2020"), labels = c("Ph. 1", "Ph. 2"))) 
-library(geofacet)
+
 output <- output %>%
   left_join(data.frame(
     location = state.name,
