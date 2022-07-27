@@ -132,7 +132,7 @@ for(i in 1:length(all_mif_files)) {
 
 # Plot GA fits and MASE ---------------------------------------------------
 
-example_state <- "Maryland"
+example_state <- "Louisiana"
 
 all_states_data %>%
   filter(location == example_state) %>%
@@ -370,76 +370,7 @@ ggsave(
 
 # Correlation analysis ----------------------------------------------------
 
-## PLACEHOLDER: READ IN ARCHIVED RESULTS
-all_files <- list.files(path = "../../COVID-stochastic-fitting/output/current/", pattern = ".csv")
-param_files <- list.files(path = "../../COVID-stochastic-fitting/output/current/", pattern = "params-natural.rds")
-state_summaries <- tibble()
-state_parameters <- tibble()
-state_logliks <- tibble()
-statedf <-readRDS("../../COVID-stochastic-fitting/output/current/statedf.rds")
-statevec <- gsub(".csv","",all_files)
-allstates_pop <- statedf %>% filter(state_full %in% statevec) %>% pull(total_pop) %>% sum()
-for(i in 1:length(all_files)) {
-  do_file <- all_files[i]
-  location <- sub(".csv", "", do_file)
-  state_metadata <- statedf %>% filter(state_full == sub(".csv", "", do_file))
-  state_pop <- state_metadata %>% pull(total_pop)
-  state_initR0 <- state_metadata %>% pull(initR0)
-  state_beta_s <- (state_initR0*.1)
-  
-  tmpparamfile <- paste0("../../COVID-stochastic-fitting/output/current/", param_files[i])
-  # tmp state params
-  statepars <- readRDS(tmpparamfile) 
-  statepars_fixed <- statepars %>% 
-    rownames_to_column(var = "param") %>% 
-    dplyr::filter(is_fitted == "no") %>% 
-    select(param,X1) %>% 
-    pivot_wider(values_from = X1, names_from = param) %>% 
-    select(-c(MIF_ID, LogLik, LogLik_SE))
-  statepars_fitted <- statepars %>% 
-    rownames_to_column(var = "param") %>% 
-    dplyr::filter(is_fitted == "yes") %>% 
-    select(param,X1) %>% 
-    pivot_wider(values_from = X1, names_from = param)
-  
-  statepars_allmle <- bind_cols(statepars_fixed,statepars_fitted)
-  
-  # results
-  tmpfile <- paste0("../../COVID-stochastic-fitting/output/current/", do_file)
-  tmp <- read.csv(tmpfile) %>% mutate(date = as.Date(date))
-  firstcasedate <- tmp$date %>% min()
-  tmp <- tmp %>%
-    filter(sim_type == "status_quo" | is.na(sim_type),
-           variable %in% c("daily_cases", "daily_deaths", "daily_all_infections", 
-                           "actual_daily_cases", "actual_daily_deaths",
-                           "mobility_trend", "latent_trend", "combined_trend",
-                           "cumulative_all_infections", "cumulative_deaths")) %>%
-    dplyr::select(location, sim_type, period, date, variable, mean_value) %>% 
-    pivot_wider(names_from = variable, values_from = mean_value) %>%
-    # calculate prevalence
-    mutate(prevalence = daily_all_infections / (state_pop-cumulative_deaths)) %>% 
-    # calculate omega
-    mutate(omega = combined_trend * statepars_allmle$beta_s) %>% 
-    # calculate mean S
-    mutate(S = state_pop - cumulative_all_infections) %>% 
-    mutate(susceptible_fraction = S / (state_pop - cumulative_deaths)) %>% 
-    # calculate q
-    mutate(q = get_q(t = as.numeric(date-firstcasedate), params = statepars_allmle)) %>%
-    # calculate s
-    mutate(s = get_s(t = as.numeric(date-firstcasedate), params = statepars_allmle)) %>%
-    # calculate mean R_e
-    mutate(R_e = getReff(S = S, 
-                         omega = omega,
-                         q = q,
-                         s = s,
-                         params = statepars_allmle)) %>%
-    pivot_longer(cols = !c(location, sim_type, period, date), 
-                 names_to = "variable", 
-                 values_to = "mean_value",
-                 values_drop_na = TRUE)
-  state_summaries <- bind_rows(state_summaries, tmp)
-}
-
+# functions to conduct and visualize correlation analysis
 # reorder matrix
 reorder_cormat <- function(cormat){
   # Use correlation between variables as distance
@@ -497,24 +428,24 @@ GetCorr <- function(df) {
   corrmatrix.reordered.upper <- get_upper_tri(corrmatrix.reordered)
   
   # melt
-  library(reshape2)
   corrmatrix.upper.melt <- reshape2::melt(corrmatrix.upper, na.rm = TRUE)
   corrmatrix.reordered.upper.melt <- reshape2::melt(corrmatrix.reordered.upper, na.rm = TRUE)
   
   return(make_heatmap(corrmatrix.reordered.upper.melt))
 }
-# START HERE
-myvars <- c("mobility_trend", "latent_trend", "R_e")
-all_trends <- state_summaries %>%
-  filter(variable %in% myvars) %>%
-  dplyr::select(location, date, variable, mean_value) %>%
-  filter(date <= as_date("2020-12-31"))
 
-trends_for_cor <- all_trends %>%
-  filter(!location %in% c("California", "Connecticut", "Illinois", "Massachusetts"))
-all_re_wide <- trends_for_cor %>%
-  filter(variable == "R_e") %>%
-  pivot_wider(names_from = variable, values_from = mean_value) %>%
+# run the analysis
+all_trends <- all_states_filters %>%
+  dplyr::select(location, date, time, pf_rep, latent_trend, mobility, R_e) %>%
+  pivot_longer(cols = latent_trend:R_e) %>%
+  group_by(location, date, name) %>%
+  summarise(mean_value = mean(value), 
+            .groups = "drop")
+
+# reformat Re trends for correlation analysis
+all_re_wide <- all_trends %>%
+  filter(name == "R_e") %>%
+  pivot_wider(names_from = name, values_from = mean_value) %>%
   select(date, location, R_e) %>% 
   pivot_wider(names_from = location, values_from = R_e) 
 re_p1_df <- all_re_wide %>%
@@ -523,17 +454,20 @@ re_p1_df <- all_re_wide %>%
 re_p2_df <- all_re_wide %>%
   filter(date >= as.Date("2020-04-24")) %>%
   dplyr::select(-date)
-all_mo_wide <- trends_for_cor %>%
-  filter(variable == "mobility_trend") %>%
-  pivot_wider(names_from = variable, values_from = mean_value) %>%
-  select(date, location, mobility_trend) %>% 
-  pivot_wider(names_from = location, values_from = mobility_trend) 
+
+# reformat mobility trends for correlation analysis
+all_mo_wide <- all_trends %>%
+  filter(name == "mobility") %>%
+  pivot_wider(names_from = name, values_from = mean_value) %>%
+  select(date, location, mobility) %>% 
+  pivot_wider(names_from = location, values_from = mobility) 
 mo_p1_df <- all_mo_wide %>%
   filter(date < as.Date("2020-04-24")) %>%
   dplyr::select(-date)
 mo_p2_df <- all_mo_wide %>%
   filter(date >= as.Date("2020-04-24")) %>%
   dplyr::select(-date)
+
 p1 <- GetCorr(re_p1_df) + ggtitle("Re, Phase 1")
 p2 <- GetCorr(re_p2_df) + ggtitle("Re, Phase 2")
 p3 <- GetCorr(mo_p1_df) + ggtitle("Mobility, Phase 1")
@@ -543,10 +477,11 @@ ggsave("../figures/cross-corrs.png", height = 8, width = 10, units = "in", dpi =
 
 
 
+
 # Analysis of variance ----------------------------------------------------
 
 trends <- all_trends %>%
-  pivot_wider(names_from = variable, values_from = mean_value) %>%
+  pivot_wider(names_from = name, values_from = mean_value) %>%
   mutate(TimePeriod = case_when(
     date < "2020-04-24" ~ "a",
     TRUE ~ "b"))
@@ -559,8 +494,8 @@ for (state in unique(trends$location)) {
       filter(TimePeriod == tp)
     m1 <- broom::tidy(anova(lm(R_e ~ 1, data = df))) %>%
       mutate(term = "null")
-    m2 <- broom::tidy(anova(lm(R_e ~ mobility_trend, data = df)))
-    m3 <- broom::tidy(anova(lm(R_e ~ mobility_trend + latent_trend, data = df)))
+    m2 <- broom::tidy(anova(lm(R_e ~ mobility, data = df)))
+    m3 <- broom::tidy(anova(lm(R_e ~ mobility + latent_trend, data = df)))
     res <- bind_rows(m1, m2, m3) %>%
       filter(term != "Residuals") %>%
       mutate(TimePeriod = tp) %>%
