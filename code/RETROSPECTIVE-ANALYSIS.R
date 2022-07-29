@@ -28,7 +28,7 @@ source("../code/result-exploration/getReff.R")
 all_files <- list.files("../output")
 all_mif_files <- all_files[grep("mif_res_2.RDS", all_files)]
 all_filter_files <- all_files[grep("filtered_states.RDS", all_files)]
-all_pomp_files <- all_files[grep("pomp_model.RDS", all_files)]
+# all_pomp_files <- all_files[grep("pomp_model.RDS", all_files)]
 
 all_states_filters <- tibble()
 all_states_data <- tibble()
@@ -37,24 +37,24 @@ for(i in 1:length(all_mif_files)) {
   this_mif_file <- all_mif_files[i]
   this_state <- str_split(this_mif_file, "-", simplify = TRUE)[1]
   this_filter_file <- all_filter_files[grep(this_state, all_filter_files)]
-  this_pomp_file <- all_pomp_files[grep(this_state, all_pomp_files)]
+  # this_pomp_file <- all_pomp_files[grep(this_state, all_pomp_files)]
   
   this_fit <- readRDS(paste0("../output/", this_mif_file))
   this_filter <- readRDS(paste0("../output/", this_filter_file))
-  this_pomp <- readRDS(paste0("../output/", this_pomp_file))
+  this_pomp <- this_fit$pomp_model
   
-  this_data <- this_pomp$pomp_data %>%
+  this_data <- this_fit$pomp_data %>%
     filter(time > 0)
   
   this_population <- this_filter %>%
     filter(time == 1, pf_rep == 1) %>%
     pull(S)
   
-  this_mobility <- this_pomp$pomp_covar@table %>%
+  this_mobility <- this_pomp@covar@table %>%
     t() %>%
     as_tibble() %>%
     dplyr::select(rel_beta_change) %>%
-    mutate(time = this_pomp$pomp_covar@times) %>%
+    mutate(time = this_pomp@covar@times) %>%
     rename("mobility" = rel_beta_change)
   
   this_params <- this_fit$partable_natural %>%
@@ -69,7 +69,7 @@ for(i in 1:length(all_mif_files)) {
   beta <- beta %>% dplyr::select(-beta_s, -base_detect_frac)
   beta <- as.numeric(beta)
   B <- pomp::bspline.basis(
-    x = this_pomp$pomp_data$time,
+    x = this_fit$pomp_data$time,
     degree = 3,
     nbasis = length(beta)
   )
@@ -109,20 +109,25 @@ for(i in 1:length(all_mif_files)) {
                          params = this_params)) %>%
     ungroup() %>%
     mutate(location = this_state) %>%
-    filter(!is.na(date))
+    filter(!is.na(date)) %>%
+    filter(date >= "2020-03-1")
   
   # resample trajectories proportional to log likelihood
   samples <- this_filter %>%
     dplyr::select(pf_rep, loglik) %>%
     distinct() %>%
-    mutate(weights = exp(loglik - mean(loglik))) %>%
-    mutate(weights = weights / sum(weights))
+    mutate(weights = exp(loglik - max(loglik)))
   
   set.seed(20220711)
   sampled_filters <- this_filter %>%
     left_join(samples, by = c("pf_rep", "loglik")) %>%
+    group_by(time, date) %>%
     slice_sample(n = nrow(samples), replace = TRUE, weight_by = weights) %>%
-    dplyr::select(-weights)
+    dplyr::select(-weights) %>%
+    arrange(time, pf_rep)
+  
+  this_data <- this_data %>%
+    filter(date >= "2020-03-01")
 
   all_states_filters <- bind_rows(all_states_filters, this_filter)
   all_states_data <- bind_rows(all_states_data, this_data)
@@ -132,7 +137,7 @@ for(i in 1:length(all_mif_files)) {
 
 # Plot GA fits and MASE ---------------------------------------------------
 
-example_state <- "Louisiana"
+example_state <- "California"
 
 all_states_data %>%
   filter(location == example_state) %>%
@@ -155,14 +160,15 @@ all_states_filters %>%
   )) %>%
   left_join(data_for_plot, by = c("time", "name")) -> data_states_for_plot
 
-my_color <- "black"
+diff_colors <- c("#EA4335", "#4285F4")
+my_color <- diff_colors[2]
 my_alpha <- 0.2
 # cases
 data_states_for_plot %>%
   filter(name == "cases") %>%
-  filter(value < 20000) %>%
+  # filter(value < 20000) %>%
   ggplot(., aes(x = date)) +
-  geom_point(aes(y = value), size = 1) +
+  geom_point(aes(y = value), size = 0.5) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
               fill = my_color, alpha = my_alpha) +
   geom_line(aes(y = median_value), size = 0.75, color = my_color) +
@@ -172,9 +178,9 @@ data_states_for_plot %>%
 # deaths
 data_states_for_plot %>%
   filter(name == "deaths") %>%
-  filter(value < 400) %>%
+  # filter(value < 400) %>%
   ggplot(., aes(x = date)) +
-  geom_point(aes(y = value), size = 1) +
+  geom_point(aes(y = value), size = 0.5) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
               fill = my_color, alpha = my_alpha) +
   geom_line(aes(y = median_value), size = 0.75, color = my_color) +
@@ -192,14 +198,15 @@ all_states_filters %>%
             upper_95_value = quantile(value, 0.975, na.rm = TRUE), 
             .groups = "drop") %>%
   ggplot(., aes(x = date, color = name, fill = name)) +
-  geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
-              alpha = my_alpha, color = NA) +
-  geom_line(aes(y = median_value)) +
+  geom_line(aes(y = median_value), size = 1) +
   labs(x = NULL, y = "Relative transmission reduction", tag = "C") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") +
-  scale_color_brewer(palette = "Set1", name = NULL) +
-  scale_fill_brewer(palette = "Set1", name = NULL) +
-  theme(legend.position = c(0.15,0.2)) -> trend_plot
+  scale_color_manual(values = diff_colors, name = NULL,
+                     labels = c("Latent trend", "Mobility")) +
+  # scale_color_brewer(palette = "Set1", name = NULL, 
+  #                    labels = c("Latent trend", "Mobility")) +
+  theme(legend.position = c(0.5,0.9),
+        legend.background = element_blank()) -> trend_plot
 
 # effective R
 all_states_filters %>%
@@ -214,8 +221,8 @@ all_states_filters %>%
   geom_hline(aes(yintercept = 1), linetype = 2) +
   geom_ribbon(aes(ymin = lower_95_value, ymax = upper_95_value), 
               fill = my_color, alpha = my_alpha, color = NA) +
-  geom_line(aes(y = median_value), color = my_color) +
-  labs(x = NULL, y = "Reproduction number", tag = "D") +
+  geom_line(aes(y = median_value), color = my_color, size = 1) +
+  labs(x = NULL, y = expression(paste("Reproduction number, ",R[e])) , tag = "D") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") -> re_plot
 
 cowplot::plot_grid(cases_plot,
@@ -323,11 +330,14 @@ ggplot(data = mobility_with_mandates, aes(x = date)) +
     color = "grey35",
     size = 3
   ) +
-  scale_color_brewer(
-    palette = "Set1",
-    name = NULL,
-    labels = c("mobility", "mandates")
-  ) +
+  scale_color_manual(values = diff_colors,
+                     name = NULL,
+                     labels = c("Mobility", "Mandates")) +
+  # scale_color_brewer(
+  #   palette = "Set1",
+  #   name = NULL,
+  #   labels = c("mobility", "mandates")
+  # ) +
   labs(x = NULL, y = "Relative value", tag = "A") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") +
   theme(legend.position = c(0.85,0.2)) -> mob_mands_plot
@@ -339,7 +349,7 @@ all_states_filters %>%
             .groups = "drop") %>%
   ggplot(., aes(x = date, y = med_re, group = location)) +
   geom_hline(aes(yintercept = 1), linetype = 2) +
-  geom_line(alpha = 0.3) +
+  geom_line(alpha = 0.2, color = my_color) +
   geom_vline(aes(xintercept = as.Date("2020-04-24")),
              linetype = 2,
              color = "grey35") +
@@ -351,7 +361,7 @@ all_states_filters %>%
     color = "grey35",
     size = 3
   ) +
-  labs(x = NULL, y = "Reproduction number", tag = "B") +
+  labs(x = NULL, y = expression(paste("Reproduction number, ",R[e])), tag = "B") +
   scale_x_date(date_breaks = "1 months", date_labels = "%b") -> re_plot_all
 
 mob_mands_re <- cowplot::plot_grid(mob_mands_plot, re_plot_all)
@@ -468,8 +478,8 @@ mo_p2_df <- all_mo_wide %>%
   filter(date >= as.Date("2020-04-24")) %>%
   dplyr::select(-date)
 
-p1 <- GetCorr(re_p1_df) + ggtitle("Re, Phase 1")
-p2 <- GetCorr(re_p2_df) + ggtitle("Re, Phase 2")
+p1 <- GetCorr(re_p1_df) + ggtitle(expression(paste(R[e], ", Phase 1")))
+p2 <- GetCorr(re_p2_df) + ggtitle(expression(paste(R[e], ", Phase 2")))
 p3 <- GetCorr(mo_p1_df) + ggtitle("Mobility, Phase 1")
 p4 <- GetCorr(mo_p2_df) + ggtitle("Mobility, Phase 2")
 cowplot::plot_grid(p3, p4, p1, p2, ncol = 2, labels = c("A","C","B","D"))
@@ -527,7 +537,10 @@ ggplot(output, aes(x = Label, y = PropVar)) +
                position = position_dodge(width = 0.5)) +
   facet_geo(~ state, grid = "us_state_grid2") +
   labs(x = NULL, y = NULL) +
-  scale_color_brewer(palette = "Set1", name = NULL, labels = c("Latent trend", "Relative mobility"))  +
+  scale_color_manual(values = diff_colors, name = NULL,
+                     labels = c("Latent trend", "Relative mobility")) +
+  # scale_color_brewer(palette = "Set1", name = NULL, 
+  #                    labels = c("Latent trend", "Relative mobility"))  +
   scale_y_continuous(breaks = c(0, 1)) +
   ggthemes::theme_few() +
   theme(legend.position = c(0.5, 0.95))
