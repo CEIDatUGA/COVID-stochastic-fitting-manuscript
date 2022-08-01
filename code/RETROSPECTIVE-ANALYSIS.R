@@ -304,7 +304,8 @@ mobility_with_mandates <- mobility %>%
   mutate(value = case_when(
     value > 1 ~ 1,
     TRUE ~ value
-  ))
+  )) %>%
+  filter(date >= "2020-03-01")
 
 means <- mobility_with_mandates %>%
   group_by(date, name) %>%

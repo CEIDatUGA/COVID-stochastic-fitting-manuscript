@@ -1,0 +1,71 @@
+---
+title: "Supplementary Information: A data-driven semiparametric model of SARS-CoV-2 transmission dynamics in the United States"
+output: pdf_document
+date: "`r Sys.Date()`"
+---
+
+John M. Drake, Andreas Handel, Éric Marty, Eamon B. O'Dea, Tierney O'Sullivan, Giovanni Righi, and Andrew T. Tredennick,
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+
+# Model diagram
+
+![Model diagram.](./figures/pomp-model.png)
+
+
+# Model parameters
+
+Table: Fixed model parameters.
+
+| Parameter definition | Parameter symbol | Value | Source |
+| -------------------------- | -------- | --------- | ------ |
+| Reproduction number | $\mathcal{R}_0$ | 7 | CDC |
+| Fraction of infected individuals that are asymptomatic | $a$ | 0.18 | ttt |
+| Fraction of diagnosed cases that are hospitalized | $h$ | 0.12 | ttt |
+| Transmission rate of symptomatic individuals | $\beta$ | $\mathcal{R}_0 \times 0.1 \times \frac{1}{N}$ | -- |
+| Relative transmissibility of $L$ to $I_{su/sd}$ | $b_L$ | 0.12 | ttt |
+| Relative transmissibility of $I_{a}$ to $I_{su/sd}$ | $b_{I_a}$ | 0.5 | ttt |
+| Relative transmissibility of $C$ to $I_{su/sd}$ | $b_{I_a}$ | 0.27 | ttt |
+| Relative transmissibility of $H$ to $I_{su/sd}$ | $b_{I_a}$ | $4.5\times10^{-5}$ | ttt |
+| Rate of movement through a single $L$ stage | $\gamma_L$ | $\frac{1}{1 \text{ days}}$ | ttt | 
+| Rate of movement through a single $I_{a}$ stage | $\gamma_{I_{a}}$ | $\frac{1}{0.88 \text{ days}}$ | ttt | 
+| Rate of movement through a single $I_{su}$ stage | $\gamma_{I_{su}}$ | $\frac{1}{1.5 \text{ days}}$ | ttt | 
+| Rate of movement through a single $I_{sd}$ stage | $\gamma_{I_{su}}$ | $\frac{1}{0.75 \text{ days}}$ | ??? |
+| Rate of movement through a single $C$ stage | $\gamma_{C}$ | $\frac{1}{0.75 \text{ days}}$ | ??? |
+| Rate of movement through a single $H$ stage | $\gamma_{H}$ | $\frac{1}{1.5 \text{ days}}$ | ttt |
+| Minimum detection probability | $q_\text{min}$ | 0.1 | ttt |
+| Maximum detection probability | $q_\text{max}$ | 0.4 | ttt |
+| Day at which detection probability is halfway between $q_\text{min}$ and $q_\text{max}$ | $q_\text{half}$ | 30 | ttt|
+| Rate of increase from $q_\text{min}$ to $q_\text{max}$ | $q_\text{r}$ | 1.0 | -- |
+| Maximum factor by which diagnosis speed incrases | $s_\text{max}$ | 1.0 | ttt |
+| Day at which diagnosis speed-up factor ($s$) is halfway between 0 and $s_\text{max}$ | $s_\text{half}$ | 30 | -- |
+| Rate of increase from 0 to $s_\text{max}$ | $s_r$ | 1.0 | -- |
+| Initial size of susceptible pool | $S(t=1)$ | $N_{\text{state}}$ | -- |
+
+
+Table: Estimated parameters and starting ranges for MIF estimation procedure.
+
+| Parameter definition | Parameter symbol | Start range |
+| ----------------------------- | ----- | ----------- |
+| Baseline fraction of hospitalizations that result in death | $m_\text{base}$ | [expit(-6), expit(6)] |
+| Minimum fraction of hospitalizations that result in death | $m_\text{min}$ | [expit(-6), expit(6)] |
+| Day at which death fraction is halfway between $m_\text{base}$ and $m_\text{min}$ | $m_\text{half}$ | [exp(-5), exp(5)] |
+| Extra-demogaphic process noise | $\sigma$ | [exp(-5), exp(5)] |
+| Case reporting dispersion | $\theta_c$ | [exp(-5), exp(5)] |
+| Death reporting dispersion | $\theta_d$ | [exp(-5), exp(5)] |
+| Initial size of latent compartment  | $L(t=0)$ | [exp(0), exp(10)] |
+| Initial size of asymptomatic infectious compartment | $I_a(t=0)$ | [exp(0), exp(10)] |
+| Initial size of undetected infectious compartment | $I_{su}(t=0)$ | [exp(0), exp(10)] |
+| Initial size of detected infectious compartment | $I_{sd}(t=0)$ | [exp(0), exp(10)] |
+| B-spline coefficients | $g_i$ | [-10, 10] |
+
+
+# Time series of incident case and death reports
+
+
+# Time series of mobility, estimated latent trend, and $\mathcal{R}_e$
