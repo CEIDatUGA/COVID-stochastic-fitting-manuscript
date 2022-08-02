@@ -15,6 +15,9 @@ library(ggthemes)
 library(cowplot)
 library(geofacet)
 
+# model benchmarking
+library(yardstick)
+
 # set plotting theme
 ggplot2::theme_set(ggthemes::theme_few(base_size = 12))
 
@@ -132,6 +135,49 @@ for(i in 1:length(all_mif_files)) {
   all_states_filters <- bind_rows(all_states_filters, this_filter)
   all_states_data <- bind_rows(all_states_data, this_data)
 }
+
+# save for use in the SI appendix
+saveRDS(all_states_data, "all-states-data.RDS")
+
+all_states_filters_summaries <- all_states_filters %>%
+  dplyr::select(location, date, pf_rep, C_new, D_new, latent_trend, mobility, R_e) %>%
+  pivot_longer(cols = C_new:R_e) %>%
+  group_by(location, date, name) %>%
+  summarise(median_value = median(value),
+         lower_95_value = quantile(value, 0.025),
+         upper_95_value = quantile(value, 0.975),
+         .groups = "drop")
+saveRDS(all_states_filters_summaries, "all-states-filters-summaries.RDS")
+
+
+# Calculate MASE ----------------------------------------------------------
+
+obs_est <- all_states_filters %>%
+  dplyr::select(location, date, pf_rep, C_new, D_new) %>%
+  rename("cases" = C_new,
+         "deaths" = D_new) %>%
+  pivot_longer(cols = cases:deaths, values_to = "estimate") %>%
+  left_join(
+    all_states_data %>%
+      dplyr::select(location, date, cases, deaths) %>%
+      pivot_longer(cols = cases:deaths, values_to = "truth"),
+    by = c("location", "date", "name")
+  )
+
+mases <- obs_est %>%
+  group_by(location, pf_rep, name) %>%
+  yardstick::mase(truth = truth,
+                  estimate = estimate,
+                  m = 7L) %>% # assumes weekly seasonality
+  ungroup() %>%
+  group_by(location, name) %>%
+  summarise(mean_mase = mean(.estimate),
+            lower95_mase = quantile(.estimate, 0.025),
+            upper95_mase = quantile(.estimate, 0.975),
+            .groups = "drop")
+
+# save for reporting in the SI
+saveRDS(mases, "./mases.RDS")
 
 
 
@@ -252,7 +298,7 @@ for(i in 1:length(mob_files)) {
   this_loc_abb <- str_split(this_file, "[_]", simplify = TRUE)[2]
   this_loc_abb <- gsub(".rds", "", this_loc_abb)
   if(this_loc_abb == "DC") {
-    this_loc <- "DistrictOfColumbia"
+    this_loc <- "District of Columbia"
   } else {
     this_loc <- state.name[state.abb == this_loc_abb]
   }
@@ -276,8 +322,8 @@ mandates <- read_csv("../data/ihme-mandates-data.csv") %>%
   rename("State_Abbv" = State_Name) %>%
   # now add in State_Name
   left_join(tibble(
-    State_Name = state.name,
-    State_Abbv = state.abb,
+    State_Name = c(state.name, "District of Columbia"),
+    State_Abbv = c(state.abb, "DC")
   ), by = "State_Abbv")
 
 # fill in dates
@@ -311,6 +357,7 @@ means <- mobility_with_mandates %>%
   group_by(date, name) %>%
   summarise(mean_value = mean(value),
             .groups = "drop")
+
 
 ggplot(data = mobility_with_mandates, aes(x = date)) +
   geom_line(aes(y = value,
@@ -348,9 +395,9 @@ all_states_filters %>%
   group_by(location, date) %>%
   summarise(med_re = median(R_e),
             .groups = "drop") %>%
-  ggplot(., aes(x = date, y = med_re, group = location)) +
+  ggplot(., aes(x = date, y = med_re)) +
   geom_hline(aes(yintercept = 1), linetype = 2) +
-  geom_line(alpha = 0.2, color = my_color) +
+  geom_line(alpha = 0.2, color = my_color, aes(group = location)) +
   geom_vline(aes(xintercept = as.Date("2020-04-24")),
              linetype = 2,
              color = "grey35") +
