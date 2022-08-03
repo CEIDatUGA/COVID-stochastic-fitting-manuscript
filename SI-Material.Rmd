@@ -22,37 +22,41 @@ diff_colors <- c("#EA4335", "#4285F4")
 ![Model diagram.](./figures/pomp-model.png)
 
 
+\newpage{}
+
 # Model parameters
 
 Table: Fixed model parameters.
 
 | Parameter definition | Parameter symbol | Value | Source |
-| -------------------------- | -------- | --------- | ------ |
+| --------------------- | ------ | --------- | --------------- |
 | Reproduction number | $\mathcal{R}_0$ | 7 | Sanche et al. (2020) |
-| Transmission rate of symptomatic individuals | $\beta$ | $\mathcal{R}_0 \times 0.1 \times \frac{1}{N}$ | Assumption |
+| Baseline transmission rate of symptomatic individuals | $\beta$ | $\mathcal{R}_0 \times 0.1 \times \frac{1}{N}$ | Assumption |
 | Fraction of infected individuals that are asymptomatic | $a$ | 0.18 | Mizumoto et al. (2020);  |
 | Fraction of diagnosed cases that are hospitalized | $h$ | 0.12 | Verity et al. (2020) |
 | Relative transmissibility of $L$ to $I_{su/sd}$ | $b_L$ | 0.12 | Li et al. (2020) |
 | Relative transmissibility of $I_{a}$ to $I_{su/sd}$ | $b_{I_a}$ | 0.5 | Li et al. (2020) |
-| Relative transmissibility of $C$ to $I_{su/sd}$ | $b_{I_a}$ | 0.27 | Assumption |
-| Relative transmissibility of $H$ to $I_{su/sd}$ | $b_{I_a}$ | $4.5\times10^{-5}$ | Moghadas et al. (2020) |
-| Rate of movement through a single $L$ stage | $\gamma_L$ | $\frac{1}{1 \text{ days}}$ | Li et al. (2020) | 
-| Rate of movement through a single $I_{a}$ stage | $\gamma_{I_{a}}$ | $\frac{1}{0.88 \text{ days}}$ | Li et al. (2020) | 
-| Rate of movement through a single $I_{su}$ stage | $\gamma_{I_{su}}$ | $\frac{1}{1.5 \text{ days}}$ | Li et al. (2020) | 
-| Rate of movement through a single $I_{sd}$ stage | $\gamma_{I_{su}}$ | $\frac{1}{0.75 \text{ days}}$ | Assumption |
-| Rate of movement through a single $C$ stage | $\gamma_{C}$ | $\frac{1}{0.75 \text{ days}}$ | Assumption |
-| Rate of movement through a single $H$ stage | $\gamma_{H}$ | $\frac{1}{1.5 \text{ days}}$ | Moghadas et al. (2020) |
+| Relative transmissibility of $C$ to $I_{su/sd}$ | $b_{C}$ | 0.27 | Assumption |
+| Relative transmissibility of $H$ to $I_{su/sd}$ | $b_{H}$ | $4.5\times10^{-5}$ | Moghadas et al. (2020) |
+| Duration of time in $L$ stages | $1/\gamma_L$ | 4 days | Li et al. (2020) | 
+| Duration of time in $I_{a}$ stage | $1/\gamma_{I_{a}}$ | 3.5 days | Li et al. (2020) | 
+| Duration of time in $I_{su}$ stages | $1/\gamma_{I_{su}}$ | 6 days | Li et al. (2020) | 
+| Duration of time in $I_{sd}$ stage | $1/\gamma_{I_{sd}}$ | $0.5\times1/\gamma_{I_{su}}$ | Assumption  |
+| Duration of time in $C$ stages | $1/\gamma_{C}$ | $0.5\times1/\gamma_{I_{su}}$ | Assumption |
+| Duration of time in $H$ stages | $1/\gamma_{H}$ | 6 days | Ohsfeldt et al. (2020) |
 | Minimum detection probability | $q_\text{min}$ | 0.1 | Assumption |
 | Maximum detection probability | $q_\text{max}$ | 0.4 | Assumption |
 | Day at which detection probability is halfway between $q_\text{min}$ and $q_\text{max}$ | $q_\text{half}$ | 30 | Assumption |
 | Rate of increase from $q_\text{min}$ to $q_\text{max}$ | $q_\text{r}$ | 1.0 | Assumption |
-| Maximum factor by which diagnosis speed incrases | $s_\text{max}$ | 1.0 | Assumption |
+| Maximum factor by which diagnosis speed incrases | $s_\text{max}$ | 1.0 | Zhang et al. (2020) |
 | Day at which diagnosis speed-up factor ($s$) is halfway between 0 and $s_\text{max}$ | $s_\text{half}$ | 30 | Assumption |
 | Rate of increase from 0 to $s_\text{max}$ | $s_r$ | 1.0 | Assumption |
 | Initial size of susceptible pool | $S(t=1)$ | $N_{\text{state}}$ | Assumption |
 
 
-Table: Estimated parameters and starting ranges for MIF estimation procedure.
+\newpage{}
+
+Table: Estimated parameters and starting ranges for MIF estimation procedure. The "expit" function refers to back-transforming the parameter from the logit scale, which was used for estimation.
 
 | Parameter definition | Parameter symbol | Start range |
 | ----------------------------- | ----- | ----------- |
@@ -69,6 +73,48 @@ Table: Estimated parameters and starting ranges for MIF estimation procedure.
 | B-spline coefficients | $g_i$ | [-10, 10] |
 
 
+\newpage{}
+# Detection probability and diagnosis speed-up functions
+
+The fraction of exposed individuals that are detected and flow into the $I_{sd}$ compartments ($q$) starts at a low level of 0.1 and increases sigmoidally towards a maximum of 0.4, reaching the half way point of 0.25 on the 30th day since the first case notification.
+The time to diagnosis ($1/s$) decreases sigmoidally over time from 3 days on day 0 towards a minimum of 1.5 days, reaching the half way point of 2.25 days on the 30th day since the first case notification. 
+
+Both $q$, $s$ follow a Hill function with Hill coefficient 1.1 and time to half maximum of 30 days:
+
+```{r, fig.height=3.5, fig.width=8.5}
+s_min <- 1/3
+s_max <- 1/1.5
+s_lim <- c(s_min, s_max)
+q_min <- 0.1
+q_max <- 0.4
+q_lim <- c(q_min, q_max)
+n <- 1.1 # Hill Coeff = xxx_rampup
+t_halfmax <- 30
+t <- seq(0,340,1/20)
+sigmoid <- t^n / (t_halfmax^n + t^n)
+q <- scales::rescale(sigmoid, from = c(0,1), to = q_lim)
+diag_time <- scales::rescale(sigmoid, from = c(0,1), to = 1/s_lim)
+plot(t, q, type = "l", bty = "n", lwd = 2, xlim = range(t), ylim = q_lim, axes = FALSE,
+     ylab = "", xlab = "Days since first reported case")
+abline(h = mean(q_lim), 
+       v = t_halfmax,
+       lty="dashed")
+axis(1, at = seq(0,340,30))
+yticks <- seq(q_min,q_max,length.out = 3)
+axis(2, at = yticks, labels = scales::percent(yticks),las=2)
+text(x = 75*2, y = mean(q_lim)-diff(q_lim)/4, cex=1, "Detection Probability\nq(t)")
+plot(t, diag_time, type = "l", bty = "n", lwd = 2, xlim = range(t), ylim = rev(1/s_lim), axes = FALSE,
+     ylab = "", xlab = "Days since first reported case")
+abline(h = mean(1/s_lim), 
+       v = t_halfmax,
+       lty="dashed")
+axis(1, at = seq(0,340,30))
+yticks <- seq(1/s_max,1/s_min,length.out = 3)
+axis(2, at = yticks, labels = paste(yticks,"days"))
+text(x = 75*2, y = mean(1/s_lim)-diff(1/s_lim)/4, cex=1, "Diagnosis time\n1/s(t)")
+```
+
+\newpage{}
 # Mean absolute scaled errors (MASE)
 
 The MASE is a ratio of mean absolute error (MAE) in the model to MAE of an in-sample naïve model (a random walk forecast from the last observation, adjusted for weekly seasonality). 
