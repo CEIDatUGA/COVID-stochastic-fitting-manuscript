@@ -49,7 +49,7 @@ all_states_data <- tibble()
 for(i in 1:length(all_mif_files)) {
   this_mif_file <- all_mif_files[i]
   this_state <- str_split(this_mif_file, "-", simplify = TRUE)[1]
-  this_filter_file <- all_filter_files[grep(this_state, all_filter_files)]
+  this_filter_file <- all_filter_files[grep(this_state, all_filter_files)][1]
   # this_pomp_file <- all_pomp_files[grep(this_state, all_pomp_files)]
   
   this_fit <- readRDS(paste0("../output/", this_mif_file))
@@ -368,6 +368,10 @@ means <- mobility_with_mandates %>%
   summarise(mean_value = mean(value),
             .groups = "drop")
 
+hawaii <- mobility_with_mandates %>%
+  filter(location == "Hawaii") %>%
+  filter(name == "rel_beta_change")
+
 
 ggplot(data = mobility_with_mandates, aes(x = date)) +
   geom_line(aes(y = value,
@@ -375,6 +379,7 @@ ggplot(data = mobility_with_mandates, aes(x = date)) +
                 linetype = location),
             alpha = 0.1) +
   geom_line(data = means, aes(y = mean_value, color = name), size = 1) +
+  geom_line(data = hawaii, aes(y = value), size = 0.5, color = diff_colors[1]) +
   scale_linetype_manual(values = rep(1, 51)) +
   guides(linetype = "none") +
   geom_vline(aes(xintercept = as.Date("2020-04-24")),
@@ -385,6 +390,14 @@ ggplot(data = mobility_with_mandates, aes(x = date)) +
     x = as.Date("2020-05-15"),
     y = 0.1,
     label = "2020-04-24",
+    color = "grey35",
+    size = 3
+  ) +
+  annotate(
+    geom = "text",
+    x = as.Date("2020-11-10"),
+    y = 0.45,
+    label = "Hawaii",
     color = "grey35",
     size = 3
   ) +
@@ -499,7 +512,7 @@ GetCorr <- function(df) {
   corrmatrix.upper.melt <- reshape2::melt(corrmatrix.upper, na.rm = TRUE)
   corrmatrix.reordered.upper.melt <- reshape2::melt(corrmatrix.reordered.upper, na.rm = TRUE)
   
-  return(make_heatmap(corrmatrix.reordered.upper.melt))
+  return(corrmatrix.reordered.upper.melt)
 }
 
 # run the analysis
@@ -536,14 +549,22 @@ mo_p2_df <- all_mo_wide %>%
   filter(date >= as.Date("2020-04-24")) %>%
   dplyr::select(-date)
 
-p1 <- GetCorr(re_p1_df) + ggtitle(expression(paste(R[e], ", Phase 1")))
-p2 <- GetCorr(re_p2_df) + ggtitle(expression(paste(R[e], ", Phase 2")))
-p3 <- GetCorr(mo_p1_df) + ggtitle("Mobility, Phase 1")
-p4 <- GetCorr(mo_p2_df) + ggtitle("Mobility, Phase 2")
+p1 <- make_heatmap(GetCorr(re_p1_df)) + ggtitle(expression(paste(R[e], ", Phase 1")))
+p2 <- make_heatmap(GetCorr(re_p2_df)) + ggtitle(expression(paste(R[e], ", Phase 2")))
+p3 <- make_heatmap(GetCorr(mo_p1_df)) + ggtitle("Mobility, Phase 1")
+p4 <- make_heatmap(GetCorr(mo_p2_df)) + ggtitle("Mobility, Phase 2")
 cowplot::plot_grid(p3, p4, p1, p2, ncol = 2, labels = c("A","C","B","D"))
 ggsave("../figures/cross-corrs.png", height = 8, width = 10, units = "in", dpi = 360)
 
+mean(abs(GetCorr(re_p1_df)$value))
+sd(abs(GetCorr(re_p1_df)$value))
+mean(abs(GetCorr(mo_p1_df)$value))
+sd(abs(GetCorr(mo_p1_df)$value))
 
+mean(abs(GetCorr(re_p2_df)$value))
+sd(abs(GetCorr(re_p2_df)$value))
+mean(abs(GetCorr(mo_p2_df)$value))
+sd(abs(GetCorr(mo_p2_df)$value))
 
 
 # Analysis of variance ----------------------------------------------------
