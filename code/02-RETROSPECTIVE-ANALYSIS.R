@@ -379,7 +379,8 @@ ggplot(data = mobility_with_mandates, aes(x = date)) +
                 linetype = location),
             alpha = 0.1) +
   geom_line(data = means, aes(y = mean_value, color = name), size = 1) +
-  geom_line(data = hawaii, aes(y = value), size = 0.5, color = diff_colors[1]) +
+  geom_line(data = hawaii, aes(y = value), size = 0.5, color = "#4c2a8f",
+            linetype = 2) +
   scale_linetype_manual(values = rep(1, 51)) +
   guides(linetype = "none") +
   geom_vline(aes(xintercept = as.Date("2020-04-24")),
@@ -606,9 +607,9 @@ output <- results %>%
 
 output <- output %>%
   left_join(data.frame(
-    location = state.name,
-    state = state.abb
-  ))
+    location = c(state.name, "District of Columbia"),
+    state = c(state.abb, "DC")
+  ), by = "location")
 ggplot(output, aes(x = Label, y = PropVar)) +
   # geom_col(aes(fill = term), position = position_dodge(), width = 0.5) +
   geom_point(aes(color = term), position = position_dodge(width = 0.5), size= 2) + 
@@ -622,8 +623,15 @@ ggplot(output, aes(x = Label, y = PropVar)) +
   #                    labels = c("Latent trend", "Relative mobility"))  +
   scale_y_continuous(breaks = c(0, 1)) +
   ggthemes::theme_few() +
-  theme(legend.position = c(0.5, 0.95))
-ggsave("../figures/anova_re_states.png", width = 10, height = 7, units = "in", dpi = 360)
+  theme(legend.position = c(0.5, 0.95)) -> anova_plot
+ggsave(
+  "../figures/anova_re_states.png",
+  anova_plot,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 360
+)
 
 
 
