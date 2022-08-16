@@ -1,13 +1,18 @@
 ---
-title: "Supplementary Information: A data-driven semiparametric model of SARS-CoV-2 transmission dynamics in the United States"
-output: pdf_document
+title: |
+  | Supplementary Information: 
+  | A data-driven semiparametric model of SARS-CoV-2 transmission dynamics in the United States
+author: |
+  | John M. Drake, Andreas Handel, Éric Marty, Eamon B. O'Dea, Tierney O'Sullivan,
+  | Giovanni Righi, and Andrew T. Tredennick
+output: 
+  pdf_document:
+    toc: true
 date: "`r Sys.Date()`"
 bibliography: COVID-Model.bib
 nocite: |
   @ohsfeldt_inpatient_2021, @verity_estimates_2020, @sanche_high_nodate, @mizumoto_estimating_2020, @li_substantial_2020, @zhang_evolving_2020
 ---
-
-John M. Drake, Andreas Handel, Éric Marty, Eamon B. O'Dea, Tierney O'Sullivan, Giovanni Righi, and Andrew T. Tredennick,
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
@@ -20,7 +25,12 @@ diff_colors <- c("#EA4335", "#4285F4")
 \renewcommand{\thefigure}{S\arabic{figure}}
 \renewcommand{\thetable}{S\arabic{table}}
 
+\newpage{}
+ 
 # Model diagram
+
+The model diagram (Fig. S1) shows the nine-stage SEIR-type compartmental model.
+The latent ($L$), infectious ($I$), case ($C$), and hospitalized ($H$) compartments are divided into four sub-compartments to approximate the distribution of durations in each compartment (see Materials and Methods in the main text).
 
 ![Model diagram.](../figures/pomp-model.png)
 
@@ -28,6 +38,11 @@ diff_colors <- c("#EA4335", "#4285F4")
 \newpage{}
 
 # Model parameters
+
+We fixed parameters with relatively well-known values to make estimation of other parameters feasible.
+The model is too flexible to fit without fixing some parameters.
+Table S1 reports the fixed parameters, their values, and the source from which the value was taken.
+Table S2 reports the estimated parameters and the parameter value range from which initial parameter sets were drawn (see Materials and Methods in the main text).
 
 Table: Fixed model parameters.
 
